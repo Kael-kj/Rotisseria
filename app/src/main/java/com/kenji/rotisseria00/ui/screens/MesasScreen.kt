@@ -7,9 +7,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -21,8 +22,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kenji.rotisseria00.R
-import io.ktor.client.request.invoke
-
+import com.kenji.rotisseria00.network.RotisseriaApi
+import kotlinx.coroutines.delay
 
 val FidalgaFont = FontFamily(
     Font(R.font.imfeensc28p)
@@ -35,10 +36,45 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
     val corTextoDestaque = Color(0xFFF8CE6A)
     val corTextoClaro = Color(0xFFEBE1CE)
 
+    // Quantidade de mesas agora é um estado (começa com 12)
+    var quantidadeTotalDeMesas by remember { mutableStateOf(12) }
 
-    val quantidadeTotalDeMesas = 12
+    // Sincronização automática com o servidor a cada 10 segundos
+    LaunchedEffect(Unit) {
+        while (true) {
+            try {
+                val comandasAbertasServidor = RotisseriaApi.buscarContasAbertas()
+                
+                // Atualiza o ControlePedidos local com o que vem do servidor
+                comandasAbertasServidor.forEach { comanda ->
+                    val itensConvertidos = comanda.itens.map { item ->
+                        ItemPedido(
+                            quantidade = item.quantidade,
+                            nome = item.nome,
+                            preco = item.preco,
+                            status = when (item.statusCozinha) {
+                                "PRONTO" -> StatusItem.PRONTO
+                                "NA_COZINHA" -> StatusItem.NA_COZINHA
+                                else -> StatusItem.NA_COZINHA
+                            }
+                        )
+                    }.toMutableList()
+                    
+                    ControlePedidos.comandasAbertas[comanda.mesa] = itensConvertidos
+                }
 
-    val mesasOcupadas = emptyList<Int>()
+                // Verifica se o servidor tem mesas com números maiores que o nosso limite atual
+                val maiorMesa = comandasAbertasServidor.map { it.mesa.toIntOrNull() ?: 0 }.maxOrNull() ?: 0
+                if (maiorMesa > quantidadeTotalDeMesas) {
+                    quantidadeTotalDeMesas = maiorMesa
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            delay(10000) // Atualiza a cada 10 segundos
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -60,21 +96,36 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
                 text = "ROTISSERIA DA ROÇA",
                 color = corTextoDestaque,
                 fontSize = 28.sp,
-                fontFamily = FidalgaFont // Usando a sua fonte!
+                fontFamily = FidalgaFont
             )
         }
 
         Spacer(modifier = Modifier.height(32.dp))
 
         // --- TÍTULO ---
-        Text(
-            text = "ESCOLHA A MESA",
-            color = corTextoClaro,
-            fontSize = 22.sp,
-            fontFamily = FidalgaFont, // Usando a sua fonte!
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Spacer(modifier = Modifier.width(48.dp)) // Equilíbrio visual
+            
+            Text(
+                text = "ESCOLHA A MESA",
+                color = corTextoClaro,
+                fontSize = 22.sp,
+                fontFamily = FidalgaFont,
+                textAlign = TextAlign.Center
+            )
+
+            // BOTÃO PARA ADICIONAR NOVA MESA
+            IconButton(
+                onClick = { quantidadeTotalDeMesas++ },
+                modifier = Modifier.background(corTextoDestaque, RoundedCornerShape(8.dp)).size(36.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Adicionar Mesa", tint = corFundoApp)
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -89,7 +140,7 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
                 val numeroMesa = index + 1
                 val numeroMesaFormatado = numeroMesa.toString().padStart(2, '0')
 
-                // LÓGICA NOVA: A mesa está ocupada se existir uma lista de itens para ela no ControlePedidos
+                // A mesa está ocupada se existir no ControlePedidos
                 val estaOcupada = ControlePedidos.comandasAbertas[numeroMesaFormatado]?.isNotEmpty() == true
 
                 MesaCard(

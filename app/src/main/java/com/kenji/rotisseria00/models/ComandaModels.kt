@@ -10,7 +10,8 @@ data class Comanda(
     val total: Double,
     val statusComanda: String,
     val metodoPagamento: String? = null,
-    val dataFechamento: String? = null
+    val dataFechamento: String? = null,
+    val dataEnvioCozinha: String? = null // Horário em que o pedido foi para a cozinha
 )
 
 @Serializable

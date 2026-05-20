@@ -12,9 +12,13 @@ import com.kenji.rotisseria00.ui.screens.CardapioSalaoScreen
 import com.kenji.rotisseria00.ui.screens.LoginScreen
 import com.kenji.rotisseria00.ui.screens.MesasScreen
 import com.kenji.rotisseria00.ui.screens.ComandaScreen // Import da nossa tela nova!
+import com.kenji.rotisseria00.ui.screens.CozinhaScreen
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    onStartService: () -> Unit = {},
+    onStopService: () -> Unit = {}
+) {
     val navController = rememberNavController()
 
     NavHost(navController = navController, startDestination = "login") {
@@ -23,13 +27,24 @@ fun AppNavigation() {
         composable("login") {
             LoginScreen(
                 onLoginSucesso = { perfil ->
-                    if (perfil == "ADMIN") {
-                        navController.navigate("admin") { // <-- MUDEI AQUI DE "dashboard" PARA "admin"
-                            popUpTo("login") { inclusive = true }
+                    when (perfil) {
+                        "ADMIN" -> {
+                            onStartService()
+                            navController.navigate("admin") {
+                                popUpTo("login") { inclusive = true }
+                            }
                         }
-                    } else {
-                        navController.navigate("mesas") {
-                            popUpTo("login") { inclusive = true }
+                        "COZINHA" -> {
+                            onStopService() // Cozinha não precisa do serviço de segundo plano do garçom
+                            navController.navigate("cozinha") {
+                                popUpTo("login") { inclusive = true }
+                            }
+                        }
+                        else -> {
+                            onStartService()
+                            navController.navigate("mesas") {
+                                popUpTo("login") { inclusive = true }
+                            }
                         }
                     }
                 }
@@ -74,6 +89,10 @@ fun AppNavigation() {
 
         composable("salao") {
             CardapioSalaoScreen() // A tela nova que você acabou de criar!
+        }
+
+        composable("cozinha") {
+            CozinhaScreen()
         }
     }
 }

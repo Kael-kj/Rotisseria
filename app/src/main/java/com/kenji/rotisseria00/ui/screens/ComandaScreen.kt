@@ -65,7 +65,8 @@ data class ItemPedido(val quantidade: Int, val nome: String, val preco: Double, 
 
 enum class StatusItem(val texto: String, val corFundo: Color, val corTexto: Color) {
     AGUARDANDO("AGUARDANDO", Color(0xFFF8CE6A), Color(0xFF432F17)),
-    NA_COZINHA("NA COZINHA", Color(0xFF388E3C), Color.White)
+    NA_COZINHA("NA COZINHA", Color(0xFF388E3C), Color.White),
+    PRONTO("PRONTO", Color(0xFF1B5E20), Color.White)
 }
 
 // =========================================================================
@@ -117,6 +118,40 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
 
     var carrinho by remember { mutableStateOf(mapOf<ItemCardapioResponse, Int>()) }
     val itensDestaMesa = ControlePedidos.comandasAbertas[numeroMesa] ?: emptyList()
+
+    // Sincronização automática com o servidor
+    LaunchedEffect(numeroMesa) {
+        while (true) {
+            try {
+                val contasAbertas = RotisseriaApi.buscarContasAbertas()
+                val comandaServidor = contasAbertas.find { it.mesa == numeroMesa }
+                
+                if (comandaServidor != null) {
+                    if (nomeCliente.isEmpty()) nomeCliente = comandaServidor.nomeCliente
+                    
+                    val itensServidor = comandaServidor.itens.map { item ->
+                        ItemPedido(
+                            quantidade = item.quantidade,
+                            nome = item.nome,
+                            preco = item.preco,
+                            status = when (item.statusCozinha) {
+                                "PRONTO" -> StatusItem.PRONTO
+                                "NA_COZINHA" -> StatusItem.NA_COZINHA
+                                else -> StatusItem.NA_COZINHA // Se veio do servidor e não tá pronto, tá na cozinha
+                            }
+                        )
+                    }
+                    
+                    // Mesclar com itens locais que ainda não foram enviados (AGUARDANDO)
+                    val itensLocaisNaoEnviados = ControlePedidos.comandasAbertas[numeroMesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                    ControlePedidos.comandasAbertas[numeroMesa] = (itensServidor + itensLocaisNaoEnviados).toMutableList()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            kotlinx.coroutines.delay(5000) // Sincroniza a cada 5 segundos
+        }
+    }
 
     LaunchedEffect(Unit) {
         isLoadingCardapio = true
@@ -336,14 +371,26 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                     }
                 }
 
+                val novosItens = itensDestaMesa.filter { it.status == StatusItem.AGUARDANDO }
+                val quantidadeNovos = novosItens.sumOf { it.quantidade }
+
                 Column(modifier = Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Button(
                         onClick = {
-                            if (itensDestaMesa.isNotEmpty()) {
+                            if (novosItens.isNotEmpty()) {
                                 coroutineScope.launch {
-                                    val itensParaEnvio = itensDestaMesa.map { com.kenji.rotisseria00.models.ItemComanda(it.quantidade, it.nome, it.preco, "AGUARDANDO") }
-                                    val valorTotal = itensDestaMesa.sumOf { it.preco * it.quantidade }
-                                    val novaComanda = com.kenji.rotisseria00.models.Comanda(mesa = numeroMesa, nomeCliente = nomeCliente, itens = itensParaEnvio, total = valorTotal, statusComanda = "EM_ABERTO")
+                                    val horarioEnvio = java.time.LocalDateTime.now().toString()
+                                    val itensParaEnvio = novosItens.map { com.kenji.rotisseria00.models.ItemComanda(it.quantidade, it.nome, it.preco, "AGUARDANDO") }
+                                    val valorTotalNovos = novosItens.sumOf { it.preco * it.quantidade }
+                                    
+                                    val novaComanda = com.kenji.rotisseria00.models.Comanda(
+                                        mesa = numeroMesa, 
+                                        nomeCliente = nomeCliente, 
+                                        itens = itensParaEnvio, 
+                                        total = valorTotalNovos, 
+                                        statusComanda = "EM_ABERTO",
+                                        dataEnvioCozinha = horarioEnvio
+                                    )
 
                                     val sucesso = RotisseriaApi.enviarComanda(novaComanda)
                                     if (sucesso) ControlePedidos.enviarParaCozinha(numeroMesa)
@@ -351,8 +398,19 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp), shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = corTextoDestaque, contentColor = corFundoApp)
-                    ) { Text("ENVIAR PARA COZINHA", fontWeight = FontWeight.Bold, fontSize = 16.sp, fontFamily = FidalgaFont) }
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (quantidadeNovos > 0) corTextoDestaque else Color(0xFF5A4A32), 
+                            contentColor = corFundoApp
+                        ),
+                        enabled = quantidadeNovos > 0
+                    ) { 
+                        Text(
+                            text = if (quantidadeNovos > 0) "ENVIAR $quantidadeNovos ITENS PARA COZINHA" else "TUDO NA COZINHA", 
+                            fontWeight = FontWeight.Bold, 
+                            fontSize = 14.sp, 
+                            fontFamily = FidalgaFont
+                        ) 
+                    }
 
                     Button(
                         onClick = {

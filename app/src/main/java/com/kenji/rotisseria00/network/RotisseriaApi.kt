@@ -216,4 +216,27 @@ object RotisseriaApi {
             null
         }
     }
+
+    // ==========================================
+    // ROTAS DA COZINHA
+    // ==========================================
+
+    suspend fun buscarPedidosCozinha(): List<Comanda> {
+        return try {
+            KtorClient.httpClient.get("$BASE_URL/cozinha/pedidos").body()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
+    suspend fun concluirPedidoCozinha(mesa: String): Boolean {
+        return try {
+            val response = KtorClient.httpClient.put("$BASE_URL/cozinha/concluir/$mesa")
+            response.status == HttpStatusCode.OK
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
 }
