@@ -43,11 +43,12 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
             try {
-                val comandasAbertasServidor = RotisseriaApi.buscarContasAbertas()
+                val contasServidor = RotisseriaApi.buscarContasAbertas()
+                val mesasNoServidor = contasServidor.map { it.mesa }.toSet()
                 
-                // Atualiza o ControlePedidos local com o que vem do servidor
-                comandasAbertasServidor.forEach { comanda ->
-                    val itensConvertidos = comanda.itens.map { item ->
+                // 1. Atualizar mesas existentes no servidor ou adicionar novas
+                contasServidor.forEach { comanda ->
+                    val itensServidor = comanda.itens.map { item ->
                         ItemPedido(
                             quantidade = item.quantidade,
                             nome = item.nome,
@@ -58,13 +59,26 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
                                 else -> StatusItem.NA_COZINHA
                             }
                         )
-                    }.toMutableList()
+                    }
                     
-                    ControlePedidos.comandasAbertas[comanda.mesa] = itensConvertidos
+                    // Preservar itens locais (AGUARDANDO) desta mesa
+                    val itensLocais = ControlePedidos.comandasAbertas[comanda.mesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                    ControlePedidos.comandasAbertas[comanda.mesa] = (itensServidor + itensLocais).toMutableList()
+                }
+
+                // 2. Limpar mesas locais que não estão no servidor, mas mantendo o que estiver "AGUARDANDO"
+                val mesasParaRemover = ControlePedidos.comandasAbertas.keys.filter { it !in mesasNoServidor }
+                mesasParaRemover.forEach { mesa ->
+                    val itensLocais = ControlePedidos.comandasAbertas[mesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                    if (itensLocais.isEmpty()) {
+                        ControlePedidos.comandasAbertas.remove(mesa)
+                    } else {
+                        ControlePedidos.comandasAbertas[mesa] = itensLocais.toMutableList()
+                    }
                 }
 
                 // Verifica se o servidor tem mesas com números maiores que o nosso limite atual
-                val maiorMesa = comandasAbertasServidor.map { it.mesa.toIntOrNull() ?: 0 }.maxOrNull() ?: 0
+                val maiorMesa = contasServidor.map { it.mesa.toIntOrNull() ?: 0 }.maxOrNull() ?: 0
                 if (maiorMesa > quantidadeTotalDeMesas) {
                     quantidadeTotalDeMesas = maiorMesa
                 }

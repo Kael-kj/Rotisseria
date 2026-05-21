@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material3.*
@@ -73,7 +74,7 @@ enum class StatusItem(val texto: String, val corFundo: Color, val corTexto: Colo
 // 2. O DESIGN DA LINHA DA COMANDA
 // =========================================================================
 @Composable
-fun ItemComandaRow(item: ItemPedido, corTextoClaro: Color, corDivisor: Color) {
+fun ItemComandaRow(item: ItemPedido, corTextoClaro: Color, corDivisor: Color, onDelete: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -88,6 +89,10 @@ fun ItemComandaRow(item: ItemPedido, corTextoClaro: Color, corDivisor: Color) {
                 modifier = Modifier.background(item.status.corFundo, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(item.status.texto, color = item.status.corTexto, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FidalgaFont)
+            }
+            
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "Remover", tint = Color(0xFFD32F2F))
             }
         }
         Divider(color = corDivisor, thickness = 1.dp)
@@ -109,9 +114,11 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
 
     val coroutineScope = rememberCoroutineScope()
     var nomeCliente by remember { mutableStateOf("") }
+    var erroConexao by remember { mutableStateOf<String?>(null) }
 
     var mostrandoCardapio by remember { mutableStateOf(false) }
     var categoriaSelecionada by remember { mutableStateOf<String?>(null) }
+    var itemSendoCancelado by remember { mutableStateOf<ItemPedido?>(null) }
 
     var cardapioReal by remember { mutableStateOf<List<ItemCardapioResponse>>(emptyList()) }
     var isLoadingCardapio by remember { mutableStateOf(false) }
@@ -126,25 +133,32 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                 val contasAbertas = RotisseriaApi.buscarContasAbertas()
                 val comandaServidor = contasAbertas.find { it.mesa == numeroMesa }
                 
-                if (comandaServidor != null) {
-                    if (nomeCliente.isEmpty()) nomeCliente = comandaServidor.nomeCliente
-                    
-                    val itensServidor = comandaServidor.itens.map { item ->
-                        ItemPedido(
-                            quantidade = item.quantidade,
-                            nome = item.nome,
-                            preco = item.preco,
-                            status = when (item.statusCozinha) {
-                                "PRONTO" -> StatusItem.PRONTO
-                                "NA_COZINHA" -> StatusItem.NA_COZINHA
-                                else -> StatusItem.NA_COZINHA // Se veio do servidor e não tá pronto, tá na cozinha
-                            }
-                        )
-                    }
-                    
-                    // Mesclar com itens locais que ainda não foram enviados (AGUARDANDO)
-                    val itensLocaisNaoEnviados = ControlePedidos.comandasAbertas[numeroMesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                val itensServidor = comandaServidor?.itens?.map { item ->
+                    ItemPedido(
+                        quantidade = item.quantidade,
+                        nome = item.nome,
+                        preco = item.preco,
+                        status = when (item.statusCozinha) {
+                            "PRONTO" -> StatusItem.PRONTO
+                            "NA_COZINHA" -> StatusItem.NA_COZINHA
+                            else -> StatusItem.NA_COZINHA
+                        }
+                    )
+                } ?: emptyList()
+
+                if (comandaServidor != null && nomeCliente.isEmpty()) {
+                    nomeCliente = comandaServidor.nomeCliente
+                }
+                
+                // Mesclar com itens locais que ainda não foram enviados (AGUARDANDO)
+                val itensLocaisNaoEnviados = ControlePedidos.comandasAbertas[numeroMesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                
+                // Só atualiza se houver algo para atualizar (evita recomposição desnecessária se estiver vazio)
+                if (itensServidor.isNotEmpty() || itensLocaisNaoEnviados.isNotEmpty()) {
                     ControlePedidos.comandasAbertas[numeroMesa] = (itensServidor + itensLocaisNaoEnviados).toMutableList()
+                } else {
+                    // Se não tem nada no servidor nem local, a mesa está livre
+                    ControlePedidos.comandasAbertas.remove(numeroMesa)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -154,9 +168,18 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
     }
 
     LaunchedEffect(Unit) {
-        isLoadingCardapio = true
-        cardapioReal = RotisseriaApi.buscarCardapio().filter { it.disponivel }
-        isLoadingCardapio = false
+        while (true) {
+            try {
+                val menuAtualizado = RotisseriaApi.buscarCardapio().filter { it.disponivel }
+                if (cardapioReal != menuAtualizado) {
+                    cardapioReal = menuAtualizado
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            isLoadingCardapio = false
+            kotlinx.coroutines.delay(3000) // Atualiza a cada 3 segundos
+        }
     }
 
     if (mostrandoCardapio) {
@@ -367,7 +390,17 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                     }
                 } else {
                     LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 24.dp)) {
-                        items(itensDestaMesa) { item -> ItemComandaRow(item, corTextoClaro, corDivisor) }
+                        items(itensDestaMesa) { item -> 
+                            ItemComandaRow(item, corTextoClaro, corDivisor) {
+                                if (item.status == StatusItem.AGUARDANDO) {
+                                    val lista = ControlePedidos.comandasAbertas[numeroMesa]?.toMutableList() ?: mutableListOf()
+                                    lista.remove(item)
+                                    ControlePedidos.comandasAbertas[numeroMesa] = lista
+                                } else {
+                                    itemSendoCancelado = item
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -392,8 +425,12 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                                         dataEnvioCozinha = horarioEnvio
                                     )
 
-                                    val sucesso = RotisseriaApi.enviarComanda(novaComanda)
-                                    if (sucesso) ControlePedidos.enviarParaCozinha(numeroMesa)
+                                    val (sucesso, mensagemErro) = RotisseriaApi.enviarComanda(novaComanda)
+                                    if (sucesso) {
+                                        ControlePedidos.enviarParaCozinha(numeroMesa)
+                                    } else {
+                                        erroConexao = mensagemErro
+                                    }
                                 }
                             }
                         },
@@ -415,10 +452,14 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                     Button(
                         onClick = {
                             coroutineScope.launch {
+                                println("DEBUG: Botão FECHAR clicado para mesa $numeroMesa")
                                 val sucesso = RotisseriaApi.fecharConta(numeroMesa)
                                 if (sucesso) {
+                                    println("DEBUG: Sucesso ao fechar, limpando estado local")
                                     ControlePedidos.comandasAbertas.remove(numeroMesa)
                                     onVoltar()
+                                } else {
+                                    println("DEBUG: Falha ao fechar conta no servidor")
                                 }
                             }
                         },
@@ -427,6 +468,76 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                     ) { Text("FECHAR CONTA / IR PRO CAIXA", fontWeight = FontWeight.Bold, fontSize = 16.sp, fontFamily = FidalgaFont) }
                 }
             }
+        }
+
+        // POP-UP DE ALERTA CASO FALTE ESTOQUE OU A REDE FALHE
+        erroConexao?.let { mensagem ->
+            val CorAlerta = Color(0xFFD32F2F)
+            val PrimaryBrown = Color(0xFF8D4F2A)
+            val SurfaceWhite = Color(0xFFFFFFFF)
+            val TextDarkBrown = Color(0xFF3E2723)
+
+            AlertDialog(
+                onDismissRequest = { erroConexao = null },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = SurfaceWhite,
+                title = { 
+                    Text(
+                        text = "Aviso do Servidor", 
+                        color = CorAlerta, 
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp
+                    ) 
+                },
+                text = { 
+                    Text(
+                        text = mensagem, 
+                        color = TextDarkBrown,
+                        fontSize = 16.sp
+                    ) 
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { erroConexao = null },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryBrown, 
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.padding(bottom = 8.dp, end = 8.dp)
+                    ) {
+                        Text("ENTENDIDO", fontWeight = FontWeight.Bold)
+                    }
+                }
+            )
+        }
+
+        // DIÁLOGO DE CONFIRMAÇÃO PARA CANCELAR ITEM NO SERVIDOR
+        itemSendoCancelado?.let { item ->
+            AlertDialog(
+                onDismissRequest = { itemSendoCancelado = null },
+                title = { Text("Cancelar Item?", fontWeight = FontWeight.Bold) },
+                text = { Text("Tem certeza que deseja cancelar '${item.nome}'? Isso estornará o estoque automaticamente.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                val sucesso = RotisseriaApi.cancelarItem(numeroMesa, item.nome)
+                                if (sucesso) {
+                                    val lista = ControlePedidos.comandasAbertas[numeroMesa]?.toMutableList() ?: mutableListOf()
+                                    lista.remove(item)
+                                    ControlePedidos.comandasAbertas[numeroMesa] = lista
+                                }
+                                itemSendoCancelado = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                    ) { Text("CANCELAR AGORA", color = Color.White) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { itemSendoCancelado = null }) { Text("VOLTAR") }
+                }
+            )
         }
     }
 }

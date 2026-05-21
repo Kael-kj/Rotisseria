@@ -44,6 +44,7 @@ fun CardapioSalaoScreen() { // Se for colocar no seu arquivo ComandaScreen, reno
     var nomeCliente by remember { mutableStateOf("") }
     var carrinho by remember { mutableStateOf(mapOf<ItemCardapioResponse, Int>()) }
     var enviandoPedido by remember { mutableStateOf(false) }
+    var erroConexao by remember { mutableStateOf<String?>(null) }
 
     // Busca o cardápio assim que a tela abre
     LaunchedEffect(Unit) {
@@ -56,6 +57,46 @@ fun CardapioSalaoScreen() { // Se for colocar no seu arquivo ComandaScreen, reno
 
     val totalPedido = carrinho.entries.sumOf { it.key.preco * it.value }
     val cardapioAgrupado = listaCardapio.groupBy { it.categoria }
+
+    if (erroConexao != null) {
+        val CorAlerta = Color(0xFFD32F2F)
+        val PrimaryBrown = Color(0xFF8D4F2A)
+        val SurfaceWhite = Color(0xFFFFFFFF)
+        val TextDarkBrown = Color(0xFF3E2723)
+
+        AlertDialog(
+            onDismissRequest = { erroConexao = null },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = SurfaceWhite,
+            title = { 
+                Text(
+                    text = "Aviso do Servidor", 
+                    color = CorAlerta, 
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                ) 
+            },
+            text = { 
+                Text(
+                    text = erroConexao!!, 
+                    color = TextDarkBrown,
+                    fontSize = 16.sp
+                ) 
+            },
+            confirmButton = {
+                Button(
+                    onClick = { erroConexao = null },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBrown, 
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("ENTENDIDO", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
 
     Scaffold(
         containerColor = corFundoApp,
@@ -91,12 +132,14 @@ fun CardapioSalaoScreen() { // Se for colocar no seu arquivo ComandaScreen, reno
                                     )
 
                                     // Envia para o Ktor (Salva no Mongo e apita na Cozinha)
-                                    val sucesso = RotisseriaApi.enviarComanda(novaComanda)
+                                    val (sucesso, mensagemErro) = RotisseriaApi.enviarComanda(novaComanda)
                                     if (sucesso) {
                                         // Limpa a tela para o garçom atender a próxima mesa
                                         numeroMesa = ""
                                         nomeCliente = ""
                                         carrinho = emptyMap()
+                                    } else {
+                                        erroConexao = mensagemErro
                                     }
                                     enviandoPedido = false
                                 }

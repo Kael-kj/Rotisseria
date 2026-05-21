@@ -8,28 +8,51 @@ import io.ktor.http.*
 
 object RotisseriaApi {
 
-     private const val BASE_URL = "https://manfully-tentiest-britt.ngrok-free.dev" //const val BASE_URL = "http://192.168.0.1:8080"
+    private var BASE_URL = "https://manfully-tentiest-britt.ngrok-free.dev"
+
+    fun updateBaseUrl(newUrl: String) {
+        BASE_URL = newUrl
+        println("API BASE_URL atualizada para: $BASE_URL")
+    }
 
     // 1. Envia a comanda para a cozinha e salva no banco
-    suspend fun enviarComanda(comanda: com.kenji.rotisseria00.models.Comanda): Boolean {
+    suspend fun enviarComanda(comanda: com.kenji.rotisseria00.models.Comanda): Pair<Boolean, String?> {
+        println("DEBUG: Tentando enviar pedido para $BASE_URL/comandas")
         return try {
             val response = KtorClient.httpClient.post("$BASE_URL/comandas") {
                 contentType(ContentType.Application.Json)
                 setBody(comanda)
             }
-            response.status == HttpStatusCode.Created
+            
+            when (response.status) {
+                HttpStatusCode.Created, HttpStatusCode.OK -> {
+                    Pair(true, null) // Sucesso total
+                }
+                HttpStatusCode.Conflict -> {
+                    // O servidor barrou por falta de estoque. Lê o JSON de erro.
+                    val erroMap = response.body<Map<String, String>>()
+                    Pair(false, erroMap["erro"] ?: "Estoque insuficiente para algum item.")
+                }
+                else -> {
+                    Pair(false, "Erro no servidor. Tente novamente.")
+                }
+            }
         } catch (e: Exception) {
+            println("DEBUG: ERRO CRÍTICO NA CONEXÃO: ${e.message}")
             e.printStackTrace()
-            false
+            Pair(false, "Falha de conexão com o servidor.")
         }
     }
 
     // 2. Garçom fecha a conta (Muda status para A_PAGAR)
     suspend fun fecharConta(mesa: String): Boolean {
+        println("DEBUG: Tentando fechar conta da mesa $mesa")
         return try {
             val response = KtorClient.httpClient.put("$BASE_URL/comandas/$mesa/fechar")
+            println("DEBUG: Resposta fechar conta: ${response.status}")
             response.status == HttpStatusCode.OK
         } catch (e: Exception) {
+            println("DEBUG: Erro ao fechar conta: ${e.message}")
             e.printStackTrace()
             false
         }
@@ -233,6 +256,16 @@ object RotisseriaApi {
     suspend fun concluirPedidoCozinha(mesa: String): Boolean {
         return try {
             val response = KtorClient.httpClient.put("$BASE_URL/cozinha/concluir/$mesa")
+            response.status == HttpStatusCode.OK
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun cancelarItem(mesa: String, nomeItem: String): Boolean {
+        return try {
+            val response = KtorClient.httpClient.delete("$BASE_URL/comandas/$mesa/item/$nomeItem")
             response.status == HttpStatusCode.OK
         } catch (e: Exception) {
             e.printStackTrace()
