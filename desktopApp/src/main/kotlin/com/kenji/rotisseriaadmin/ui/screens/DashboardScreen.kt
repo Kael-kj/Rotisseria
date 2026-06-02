@@ -61,7 +61,7 @@ fun DashboardScreen() {
                             text = "Centro de Comando",
                             color = TextDarkBrown,
                             fontSize = 32.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.ExtraBold
                         )
                     }
 
@@ -71,7 +71,7 @@ fun DashboardScreen() {
                             backgroundColor = PrimaryBrown,
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.fillMaxWidth().height(160.dp),
-                            elevation = 2.dp
+                            elevation = 4.dp
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -79,15 +79,15 @@ fun DashboardScreen() {
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column(verticalArrangement = Arrangement.Center) {
-                                    Text("FATURAMENTO HOJE", color = OnPrimary.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    Text("FATURAMENTO HOJE", color = OnPrimary, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
                                     Spacer(Modifier.height(8.dp))
-                                    Text("R$ ${"%.2f".format(dados.vendasHoje)}", color = OnPrimary, fontSize = 52.sp, fontWeight = FontWeight.Bold)
+                                    Text("R$ ${"%.2f".format(dados.vendasHoje)}", color = OnPrimary, fontSize = 52.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.Center) {
-                                    Text("Ticket Médio: R$ ${"%.2f".format(dados.ticketMedio)}", color = OnPrimary.copy(alpha = 0.8f), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Text("Ticket Médio: R$ ${"%.2f".format(dados.ticketMedio)}", color = OnPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Box(modifier = Modifier.background(SecondaryOrange, RoundedCornerShape(8.dp)).padding(horizontal = 20.dp, vertical = 10.dp)) {
-                                        Text("${dados.pedidosHoje} PEDIDOS CONCLUÍDOS", color = OnSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text("${dados.pedidosHoje} PEDIDOS CONCLUÍDOS", color = OnPrimary, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
                                     }
                                 }
                             }
@@ -96,8 +96,8 @@ fun DashboardScreen() {
 
                     // RAIO-X DA OPERAÇÃO (Cards em Branco com Texto Escuro)
                     item {
-                        Text("RAIO-X DA OPERAÇÃO", color = TextDarkBrown, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("RAIO-X DA OPERAÇÃO", color = TextDarkBrown, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             CardResumoSetor(
                                 titulo = "CAIXA E SALÃO",
@@ -130,26 +130,29 @@ fun DashboardScreen() {
                     item {
                         val pratosComLimite = cardapioReal.filter { it.estoqueAtual != null && it.disponivel }
                         if (pratosComLimite.isNotEmpty()) {
-                            Text("CONTROLE DE PRODUÇÃO (PRATOS DO DIA)", color = TextDarkBrown, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 12.dp))
+                            Text("CONTROLE DE PRODUÇÃO (PRATOS DO DIA)", color = TextDarkBrown, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 24.dp, bottom = 16.dp))
 
-                            Card(backgroundColor = SurfaceWhite, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(), elevation = 1.dp) {
+                            Card(backgroundColor = SurfaceWhite, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth(), elevation = 2.dp) {
                                 Column(modifier = Modifier.padding(24.dp)) {
                                     pratosComLimite.forEachIndexed { index, prato ->
                                         val estoqueAtual = prato.estoqueAtual ?: 0
                                         val limiteOriginal = prato.limiteDiario ?: 0
 
+                                        // Lógica visual: Se o estoque estiver acabando (menos de 20% do limite), pinta de vermelho.
+                                        val corAlertaEstoque = if (limiteOriginal > 0 && estoqueAtual <= limiteOriginal * 0.2) corAlerta else PrimaryBrown
+
                                         Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(text = prato.nome, color = TextDarkBrown, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-                                            Box(modifier = Modifier.background(BackgroundCream, RoundedCornerShape(6.dp)).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                                                Text(text = "RESTAM $estoqueAtual DE $limiteOriginal", color = PrimaryBrown, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text(text = prato.nome, color = TextDarkBrown, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                            Box(modifier = Modifier.background(BackgroundCream, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 10.dp)) {
+                                                Text(text = "RESTAM $estoqueAtual DE $limiteOriginal", color = corAlertaEstoque, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
                                             }
                                         }
                                         if (index < pratosComLimite.size - 1) {
-                                            Divider(color = BackgroundCream, thickness = 2.dp)
+                                            Divider(color = TextDarkBrown.copy(alpha = 0.1f), thickness = 2.dp)
                                         }
                                     }
                                 }
@@ -164,17 +167,17 @@ fun DashboardScreen() {
 
 @Composable
 fun CardResumoSetor(titulo: String, icone: ImageVector, infoPrincipal: String, infoSecundaria: String, corDestaque: Color, modifier: Modifier = Modifier) {
-    Card(backgroundColor = SurfaceWhite, shape = RoundedCornerShape(16.dp), modifier = modifier.height(140.dp), elevation = 1.dp) {
-        Column(modifier = Modifier.padding(20.dp).fillMaxSize()) {
+    Card(backgroundColor = SurfaceWhite, shape = RoundedCornerShape(16.dp), modifier = modifier.height(150.dp), elevation = 2.dp) {
+        Column(modifier = Modifier.padding(24.dp).fillMaxSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icone, contentDescription = null, tint = TextDarkBrown.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
+                Icon(icone, contentDescription = null, tint = TextDarkBrown, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(text = titulo, color = TextDarkBrown.copy(alpha = 0.4f), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(text = titulo, color = TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
             }
             Spacer(modifier = Modifier.weight(1f))
-            Text(text = infoPrincipal, color = corDestaque, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(text = infoPrincipal, color = corDestaque, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(text = infoSecundaria, color = TextDarkBrown.copy(alpha = 0.6f), fontSize = 13.sp)
+            Text(text = infoSecundaria, color = TextDarkBrown, fontSize = 15.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

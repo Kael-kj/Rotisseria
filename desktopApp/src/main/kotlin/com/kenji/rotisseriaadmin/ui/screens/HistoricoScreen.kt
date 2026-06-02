@@ -20,15 +20,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kenji.rotisseriaadmin.data.ComandaResponse
-import com.kenji.rotisseriaadmin.data.ItemComanda
+import com.kenji.rotisseriaadmin.data.RotisseriaApi
 import com.kenji.rotisseriaadmin.ui.theme.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
+import java.time.temporal.WeekFields
+import java.util.*
 
 @Composable
 fun HistoricoScreen() {
     val coroutineScope = rememberCoroutineScope()
 
-    // Estados dos Dados
+    // ==========================================
+    // 1. ESTADOS PRINCIPAIS
+    // ==========================================
     var historicoComandas by remember { mutableStateOf<List<ComandaResponse>>(emptyList()) }
     var comandaSelecionada by remember { mutableStateOf<ComandaResponse?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -36,36 +44,55 @@ fun HistoricoScreen() {
     // Estados dos Filtros
     val filtrosTempo = listOf("HOJE", "ESTA SEMANA", "ESTE MÊS", "TUDO")
     var filtroTempoSelecionado by remember { mutableStateOf("TUDO") }
-
     var filtroPrato by remember { mutableStateOf("Todos") }
     var filtroCategoria by remember { mutableStateOf("Todas") }
     var filtroParceria by remember { mutableStateOf("Todas") }
 
-    // Simulação de carregamento (Substitua por RotisseriaApi.buscarHistorico())
+    // Carregamento Real dos Dados
     LaunchedEffect(Unit) {
         isLoading = true
-        // Mock de dados baseado na sua imagem
-        historicoComandas = listOf(
-            ComandaResponse("MESA 10", "BALCÃO", listOf(
-                ItemComanda(1, "Batata Frita", 20.0, "PRONTO", "Acompanhamentos", "Nenhuma")
-            ), 20.0, "FECHADA", "Cartão Crédito", "06/04/2026 às 15:54"),
-            ComandaResponse("MESA 02", "MARCOS", listOf(), 45.0, "FECHADA", "Pix", "Data não registrada"),
-            ComandaResponse("MESA 01", "JOÃO", listOf(), 45.0, "FECHADA", "Dinheiro", "14/05/2026 às 15:36"),
-            ComandaResponse("MESA 05", "MARIA", listOf(), 12.0, "FECHADA", "Cartão Débito", "Data não registrada"),
-            ComandaResponse("MESA 06", "CLIENTE", listOf(), 60.0, "FECHADA", "Pix", "Data não registrada"),
-            ComandaResponse("MESA 03", "CLIENTE", listOf(), 57.0, "FECHADA", "Dinheiro", "Data não registrada"),
-            ComandaResponse("VIAGEM", "BALCÃO", listOf(
-                ItemComanda(1, "Batata Frita", 20.0, "PRONTO", "Acompanhamentos", "Nenhuma"),
-                ItemComanda(1, "Arroz", 5.0, "PRONTO", "Acompanhamentos", "Nenhuma"),
-                ItemComanda(2, "Lasanha", 55.0, "PRONTO", "Prato principal", "Nenhuma"),
-                ItemComanda(2, "Carne desfiada", 35.0, "PRONTO", "Prato principal", "Nenhuma"),
-                ItemComanda(1, "Joelho de Porco Assado", 125.0, "PRONTO", "Prato principal", "Nenhuma")
-            ), 330.0, "FECHADA", "Cartão Crédito", "06/04/2026 às 16:07")
-        )
+        try {
+            historicoComandas = RotisseriaApi.buscarHistorico()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         isLoading = false
     }
 
-    val totalVendido = historicoComandas.sumOf { it.total }
+    // ==========================================
+    // 2. LÓGICA DE OPÇÕES DINÂMICAS PARA OS DROPDOWNS
+    // ==========================================
+    // Lê todas as comandas baixadas e extrai os itens únicos para não termos opções repetidas ou vazias
+    val opcoesPratos = remember(historicoComandas) {
+        listOf("Todos") + historicoComandas.flatMap { it.itens }.map { it.nome }.distinct().sorted()
+    }
+    val opcoesCategorias = remember(historicoComandas) {
+        listOf("Todas") + historicoComandas.flatMap { it.itens }.map { it.categoria }.distinct().sorted()
+    }
+    val opcoesParcerias = remember(historicoComandas) {
+        listOf("Todas") + historicoComandas.flatMap { it.itens }.map { it.parceria }.distinct().sorted()
+    }
+
+    // ==========================================
+    // 3. O MOTOR DOS FILTROS (Reativo)
+    // ==========================================
+    val comandasFiltradas = remember(historicoComandas, filtroTempoSelecionado, filtroPrato, filtroCategoria, filtroParceria) {
+        historicoComandas.filter { comanda ->
+            // A. Filtro de Tempo
+            val passaTempo = isDataDentroDoFiltro(comanda.dataFechamento, filtroTempoSelecionado)
+
+            // B. Filtro de Itens (Se for "Todos", passa direto. Se não, procura dentro da comanda)
+            val passaPrato = filtroPrato == "Todos" || comanda.itens.any { it.nome == filtroPrato }
+            val passaCategoria = filtroCategoria == "Todas" || comanda.itens.any { it.categoria == filtroCategoria }
+            val passaParceria = filtroParceria == "Todas" || comanda.itens.any { it.parceria == filtroParceria }
+
+            // A comanda só aparece se passar em todos os testes simultaneamente
+            passaTempo && passaPrato && passaCategoria && passaParceria
+        }
+    }
+
+    // O total vendido agora calcula apenas o que está aparecendo na tela!
+    val totalVendido = comandasFiltradas.sumOf { it.total }
 
     Box(modifier = Modifier.fillMaxSize().padding(32.dp)) {
         if (isLoading) {
@@ -73,11 +100,9 @@ fun HistoricoScreen() {
         } else {
             Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
 
-                // ==========================================
                 // COLUNA DA ESQUERDA: FILTROS E LISTA
-                // ==========================================
                 Column(modifier = Modifier.weight(1.3f)) {
-                    Text("HISTÓRICO DE VENDAS", color = TextDarkBrown, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("Histórico de Vendas", color = TextDarkBrown, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(modifier = Modifier.height(24.dp))
 
                     // LINHA 1: Filtros de Tempo (Chips)
@@ -88,13 +113,16 @@ fun HistoricoScreen() {
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(if (isSelecionado) SecondaryOrange else SurfaceWhite)
-                                    .clickable { filtroTempoSelecionado = tempo }
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                                    .clickable {
+                                        filtroTempoSelecionado = tempo
+                                        comandaSelecionada = null // Limpa a seleção ao trocar de filtro
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
                             ) {
                                 Text(
                                     text = tempo,
-                                    color = if (isSelecionado) SurfaceWhite else TextDarkBrown,
-                                    fontSize = 12.sp,
+                                    color = if (isSelecionado) Color.White else TextDarkBrown,
+                                    fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -102,56 +130,69 @@ fun HistoricoScreen() {
                     }
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // LINHA 2: Filtros Dropdown (Prato, Categoria, Parceria)
+                    // LINHA 2: Filtros Dropdown Interativos
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        FiltroDropdown("Prato", filtroPrato, modifier = Modifier.weight(1f))
-                        FiltroDropdown("Categoria", filtroCategoria, modifier = Modifier.weight(1f))
-                        FiltroDropdown("Parceria", filtroParceria, modifier = Modifier.weight(1f))
+                        FiltroDropdown("Prato", filtroPrato, opcoesPratos, { filtroPrato = it; comandaSelecionada = null }, modifier = Modifier.weight(1f))
+                        FiltroDropdown("Categoria", filtroCategoria, opcoesCategorias, { filtroCategoria = it; comandaSelecionada = null }, modifier = Modifier.weight(1f))
+                        FiltroDropdown("Parceria", filtroParceria, opcoesParcerias, { filtroParceria = it; comandaSelecionada = null }, modifier = Modifier.weight(1f))
 
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
+                                .size(56.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(SecondaryOrange)
-                                .clickable { /* Aplicar filtros extras se houver */ },
+                                .clickable {
+                                    // Botão de Reset rápido para limpar tudo de uma vez
+                                    filtroTempoSelecionado = "TUDO"
+                                    filtroPrato = "Todos"
+                                    filtroCategoria = "Todas"
+                                    filtroParceria = "Todas"
+                                    comandaSelecionada = null
+                                },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.FilterList, contentDescription = "Filtrar", tint = SurfaceWhite)
+                            Icon(Icons.Default.FilterList, contentDescription = "Limpar Filtros", tint = Color.White, modifier = Modifier.size(28.dp))
                         }
                     }
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // LINHA 3: Resumo (Contagem e Total)
+                    // LINHA 3: Resumo Dinâmico
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Pedidos Finalizados (${historicoComandas.size})", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Text("R$ ${"%.2f".format(totalVendido)}", color = SecondaryOrange, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Text("Pedidos Filtrados (${comandasFiltradas.size})", color = TextDarkBrown, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+                        Text("R$ ${"%.2f".format(totalVendido)}", color = SecondaryOrange, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // LISTA DE VENDAS FINALIZADAS
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(historicoComandas) { comanda ->
-                            val isSelecionada = comanda == comandaSelecionada
-                            Card(
-                                backgroundColor = if (isSelecionada) BackgroundCream else SurfaceWhite,
-                                elevation = if (isSelecionada) 4.dp else 1.dp,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().clickable { comandaSelecionada = comanda }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(20.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                    // LISTA DE VENDAS (Agora usa comandasFiltradas)
+                    if (comandasFiltradas.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                            Text("Nenhum pedido encontrado com esses filtros.", color = TextDarkBrown.copy(alpha = 0.5f), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            items(comandasFiltradas) { comanda ->
+                                val isSelecionada = comanda == comandaSelecionada
+                                Card(
+                                    backgroundColor = if (isSelecionada) BackgroundCream else SurfaceWhite,
+                                    elevation = if (isSelecionada) 8.dp else 2.dp,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().clickable { comandaSelecionada = comanda }
                                 ) {
-                                    Column {
-                                        Text(comanda.mesa.uppercase(), color = TextDarkBrown, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(comanda.dataFechamento ?: "Data não registrada", color = TextDarkBrown.copy(alpha = 0.6f), fontSize = 12.sp)
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text("R$ ${"%.2f".format(comanda.total)}", color = CorVerde, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text("PAGO", color = TextDarkBrown.copy(alpha = 0.6f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Row(
+                                        modifier = Modifier.padding(20.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(comanda.mesa.uppercase(), color = TextDarkBrown, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(comanda.dataFechamento ?: "Data não registrada", color = TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("R$ ${"%.2f".format(comanda.total)}", color = CorVerde, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(comanda.statusComanda, color = TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             }
@@ -159,65 +200,61 @@ fun HistoricoScreen() {
                     }
                 }
 
-                // ==========================================
-                // COLUNA DA DIREITA: DETALHES DO PEDIDO
-                // ==========================================
+                // COLUNA DA DIREITA: DETALHES (Mantida exatamente como você já tinha deixado)
                 Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
                     if (comandaSelecionada == null) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Selecione um pedido ao lado para ver os detalhes", color = TextDarkBrown.copy(alpha = 0.3f), fontSize = 18.sp)
+                            Text("Selecione um pedido na lista para ver os detalhes", color = TextDarkBrown, fontSize = 18.sp, fontWeight = FontWeight.Medium)
                         }
                     } else {
                         val comanda = comandaSelecionada!!
 
-                        // PARTE SUPERIOR: Itens Consumidos
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Detalhes do Pedido", color = TextDarkBrown, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Text("DETALHES DO PEDIDO", color = TextDarkBrown, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("${comanda.mesa} - Cliente: ${comanda.nomeCliente}", color = TextDarkBrown.copy(alpha = 0.7f), fontSize = 16.sp)
+                            Text("${comanda.mesa} - Cliente: ${comanda.nomeCliente}", color = PrimaryBrown, fontSize = 18.sp, fontWeight = FontWeight.Bold)
 
-                            Divider(color = SurfaceWhite, thickness = 2.dp, modifier = Modifier.padding(vertical = 24.dp))
+                            Divider(color = TextDarkBrown.copy(alpha = 0.1f), thickness = 2.dp, modifier = Modifier.padding(vertical = 24.dp))
 
-                            Text("ITENS CONSUMIDOS:", color = TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("ITENS CONSUMIDOS:", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
                             Spacer(modifier = Modifier.height(16.dp))
 
                             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 items(comanda.itens) { item ->
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                        Text("${item.quantidade}x ${item.nome}", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                                        Text("R$ ${"%.2f".format(item.preco * item.quantidade)}", color = TextDarkBrown.copy(alpha = 0.7f), fontSize = 16.sp)
+                                        Text("${item.quantidade}x  ${item.nome}", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                        Text("R$ ${"%.2f".format(item.preco * item.quantidade)}", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                                     }
                                 }
                             }
                         }
 
-                        // PARTE INFERIOR: Totais e Reimpressão
                         Column {
-                            Divider(color = SurfaceWhite, thickness = 2.dp, modifier = Modifier.padding(vertical = 16.dp))
+                            Divider(color = TextDarkBrown.copy(alpha = 0.1f), thickness = 2.dp, modifier = Modifier.padding(vertical = 20.dp))
 
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Column {
-                                    Text("TOTAL PAGO:", color = TextDarkBrown.copy(alpha = 0.7f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                    Text("R$ ${"%.2f".format(comanda.total)}", color = CorVerde, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                                    Text("TOTAL PAGO:", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                                    Text("R$ ${"%.2f".format(comanda.total)}", color = CorVerde, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text("MÉTODO DE PAGAMENTO:", color = TextDarkBrown.copy(alpha = 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    Text(comanda.metodoPagamento ?: "Não informado", color = TextDarkBrown, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    Text("MÉTODO DE PAGAMENTO:", color = TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(comanda.metodoPagamento ?: "Não informado", color = TextDarkBrown, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
                             Spacer(modifier = Modifier.height(32.dp))
 
-                            // BOTÃO REIMPRIMIR
                             Button(
                                 onClick = { /* TODO: Chamar lógica de impressão */ },
-                                modifier = Modifier.fillMaxWidth().height(60.dp),
-                                colors = ButtonDefaults.buttonColors(backgroundColor = SecondaryOrange, contentColor = SurfaceWhite),
+                                modifier = Modifier.fillMaxWidth().height(64.dp),
+                                colors = ButtonDefaults.buttonColors(backgroundColor = SecondaryOrange, contentColor = Color.White),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Print, contentDescription = "Imprimir", modifier = Modifier.size(24.dp))
+                                Icon(Icons.Default.Print, contentDescription = "Imprimir", modifier = Modifier.size(28.dp))
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text("REIMPRIMIR COMPROVANTE", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text("REIMPRIMIR COMPROVANTE", fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                             }
                         }
                     }
@@ -227,9 +264,13 @@ fun HistoricoScreen() {
     }
 }
 
-// Componente auxiliar para os Dropdowns menores de filtro
+// ==========================================
+// FUNÇÕES AUXILIARES
+// ==========================================
+
+// 1. O Componente de Dropdown agora recebe as opções e devolve qual foi clicada
 @Composable
-fun FiltroDropdown(label: String, value: String, modifier: Modifier = Modifier) {
+fun FiltroDropdown(label: String, value: String, options: List<String>, onOptionSelected: (String) -> Unit, modifier: Modifier = Modifier) {
     var expanded by remember { mutableStateOf(false) }
 
     Box(modifier = modifier) {
@@ -237,19 +278,68 @@ fun FiltroDropdown(label: String, value: String, modifier: Modifier = Modifier) 
             value = value,
             onValueChange = {},
             readOnly = true,
-            label = { Text(label) },
-            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.clickable { expanded = true }) },
+            label = { Text(label, fontWeight = FontWeight.Medium) },
+            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Abrir", tint = TextDarkBrown, modifier = Modifier.clickable { expanded = true }) },
             colors = TextFieldDefaults.outlinedTextFieldColors(
+                textColor = TextDarkBrown,
                 focusedBorderColor = PrimaryBrown,
-                unfocusedBorderColor = SurfaceWhite,
-                textColor = TextDarkBrown
+                cursorColor = PrimaryBrown,
+                unfocusedBorderColor = TextDarkBrown.copy(alpha = 0.5f)
             ),
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
-        // Adicione os itens do Dropdown aqui futuramente se precisar
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(onClick = { expanded = false }) { Text("Todos") }
+            options.forEach { opcao ->
+                DropdownMenuItem(onClick = {
+                    onOptionSelected(opcao)
+                    expanded = false
+                }) {
+                    Text(opcao, color = TextDarkBrown, fontWeight = FontWeight.Medium)
+                }
+            }
         }
+    }
+}
+
+// 2. A lógica que entende as datas que vieram do banco de dados e as compara com hoje
+fun isDataDentroDoFiltro(dataFechamento: String?, filtro: String): Boolean {
+    if (filtro == "TUDO") return true
+    if (dataFechamento.isNullOrBlank() || dataFechamento.contains("não registrada", ignoreCase = true)) return false
+
+    val dataReal: LocalDate? = try {
+        when {
+            dataFechamento.contains("às") -> {
+                // Converte datas amigáveis como "21/05/2026 às 15:54"
+                val textoLimpo = dataFechamento.replace(" às ", " ")
+                val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+                LocalDateTime.parse(textoLimpo, formatter).toLocalDate()
+            }
+            dataFechamento.contains("T") -> {
+                // Converte datas de computador como "2026-05-21T15:54:00"
+                LocalDateTime.parse(dataFechamento).toLocalDate()
+            }
+            else -> null
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+
+    // Se o sistema não conseguir decifrar a data, ele não esconde a venda do seu pai
+    if (dataReal == null) return true
+
+    val hoje = LocalDate.now()
+
+    return when (filtro) {
+        "HOJE" -> dataReal.isEqual(hoje)
+        "ESTA SEMANA" -> {
+            val weekFields = WeekFields.of(Locale("pt", "BR"))
+            val semanaComanda = dataReal.get(weekFields.weekOfWeekBasedYear())
+            val semanaAtual = hoje.get(weekFields.weekOfWeekBasedYear())
+            dataReal.year == hoje.year && semanaComanda == semanaAtual
+        }
+        "ESTE MÊS" -> dataReal.year == hoje.year && dataReal.month == hoje.month
+        else -> true
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.kenji.rotisseriaadmin.data.ItemEstoqueRequest
 import com.kenji.rotisseriaadmin.data.ItemEstoqueResponse
 import com.kenji.rotisseriaadmin.data.RotisseriaApi
+import com.kenji.rotisseriaadmin.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -29,11 +31,6 @@ import java.util.Locale
 
 @Composable
 fun EstoqueScreen() {
-    val corTextoDestaque = Color(0xFFF8CE6A)
-    val corTextoClaro = Color(0xFFEBE1CE)
-    val corFundoCard = Color(0xFF362511)
-    val corDivisor = Color(0xFF5A4A32)
-
     val coroutineScope = rememberCoroutineScope()
 
     var listaEstoque by remember { mutableStateOf<List<ItemEstoqueResponse>>(emptyList()) }
@@ -59,16 +56,17 @@ fun EstoqueScreen() {
     }
 
     Scaffold(
-        backgroundColor = Color.Transparent, // Fundo herdado do App.kt
+        backgroundColor = Color.Transparent,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
                     itemEmEdicao = null
                     mostrarModal = true
                 },
-                backgroundColor = corTextoDestaque,
-                contentColor = corFundoCard,
-                shape = RoundedCornerShape(16.dp)
+                backgroundColor = SecondaryOrange,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.size(64.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Novo Item", modifier = Modifier.size(32.dp))
             }
@@ -78,25 +76,26 @@ fun EstoqueScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .padding(32.dp) // Adicionado padding global da tela
         ) {
-            Text("GESTÃO DE ESTOQUE", color = corTextoDestaque, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Text("Gestão de Estoque", color = TextDarkBrown, fontSize = 32.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(modifier = Modifier.height(32.dp))
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = corTextoDestaque)
+                    CircularProgressIndicator(color = PrimaryBrown)
                 }
             } else if (listaEstoque.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Estoque vazio. Clique no + para adicionar.", color = corTextoClaro.copy(alpha = 0.5f), fontSize = 20.sp)
+                    Text("Estoque vazio. Clique no + para adicionar.", color = TextDarkBrown, fontSize = 20.sp, fontWeight = FontWeight.Medium)
                 }
             } else {
                 Row(modifier = Modifier.fillMaxSize()) {
                     // =====================================
                     // COLUNA ESQUERDA: LISTA COM SCROLLBAR
                     // =====================================
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("ITENS EM ESTOQUE", color = corTextoClaro, fontSize = 20.sp)
+                    Column(modifier = Modifier.weight(1.3f)) {
+                        Text("ITENS CADASTRADOS", color = PrimaryBrown, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                         Spacer(modifier = Modifier.height(16.dp))
 
                         val state = rememberLazyListState()
@@ -105,11 +104,13 @@ fun EstoqueScreen() {
                             LazyColumn(
                                 state = state,
                                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                                modifier = Modifier.fillMaxSize().padding(end = 12.dp)
+                                modifier = Modifier.fillMaxSize().padding(end = 16.dp)
                             ) {
                                 items(listaEstoque) { item ->
                                     val isSelecionado = itemSelecionado?.id == item.id
-                                    CardItemEstoque(item, isSelecionado, corTextoDestaque, corFundoCard, corTextoClaro,
+                                    CardItemEstoque(
+                                        item = item,
+                                        isSelecionado = isSelecionado,
                                         onClick = { itemSelecionado = item },
                                         onEditClick = {
                                             itemEmEdicao = item
@@ -118,7 +119,6 @@ fun EstoqueScreen() {
                                     )
                                 }
                             }
-                            // Barra de Rolagem Exclusiva do Desktop
                             VerticalScrollbar(
                                 modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                                 adapter = rememberScrollbarAdapter(scrollState = state)
@@ -127,15 +127,15 @@ fun EstoqueScreen() {
                     }
 
                     Spacer(modifier = Modifier.width(32.dp))
-                    Box(modifier = Modifier.width(1.dp).fillMaxHeight().background(corDivisor))
+                    Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(TextDarkBrown.copy(alpha = 0.1f)))
                     Spacer(modifier = Modifier.width(32.dp))
 
                     // =====================================
                     // COLUNA DIREITA: DETALHES
                     // =====================================
-                    Column(modifier = Modifier.weight(1.2f)) {
+                    Column(modifier = Modifier.weight(1f)) {
                         itemSelecionado?.let { item ->
-                            CardDetalhesEstoque(item, corFundoCard, corTextoDestaque, corTextoClaro) {
+                            CardDetalhesEstoque(item) {
                                 itemEmEdicao = item
                                 mostrarModal = true
                             }
@@ -148,7 +148,7 @@ fun EstoqueScreen() {
 
     if (mostrarModal) {
         ModalEstoque(
-            item = itemEmEdicao, corFundo = corFundoCard, corDestaque = corTextoDestaque, corTexto = corTextoClaro,
+            item = itemEmEdicao,
             onDismiss = { mostrarModal = false },
             onSave = { nome, atual, minima, unidade ->
                 coroutineScope.launch {
@@ -169,8 +169,110 @@ fun EstoqueScreen() {
 }
 
 @Composable
+fun CardItemEstoque(item: ItemEstoqueResponse, isSelecionado: Boolean, onClick: () -> Unit, onEditClick: () -> Unit) {
+    val backgroundColor = if (isSelecionado) PrimaryBrown else SurfaceWhite
+    val textColor = if (isSelecionado) OnPrimary else TextDarkBrown
+    val emAlerta = item.quantidadeAtual <= item.quantidadeMinima
+
+    Card(
+        backgroundColor = backgroundColor,
+        shape = RoundedCornerShape(12.dp),
+        elevation = if (isSelecionado) 8.dp else 2.dp,
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (emAlerta) {
+                        Icon(Icons.Default.Warning, contentDescription = "Alerta", tint = if (isSelecionado) SecondaryOrange else CorAlerta, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = item.nome,
+                        color = textColor,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "Qtd: ${item.quantidadeAtual}${item.unidade}", color = if (emAlerta && !isSelecionado) CorAlerta else textColor, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(text = "  |  Mínimo: ${item.quantidadeMinima}${item.unidade}", color = if (isSelecionado) textColor.copy(alpha = 0.8f) else TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+            if (isSelecionado) {
+                IconButton(
+                    onClick = onEditClick,
+                    modifier = Modifier.background(SecondaryOrange, RoundedCornerShape(8.dp)).size(48.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = "Editar", tint = Color.White, modifier = Modifier.size(24.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CardDetalhesEstoque(item: ItemEstoqueResponse, onAjustarClick: () -> Unit) {
+    val emAlerta = item.quantidadeAtual <= item.quantidadeMinima
+
+    Card(backgroundColor = SurfaceWhite, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(), elevation = 2.dp) {
+        Column(modifier = Modifier.padding(32.dp)) {
+            Text("DETALHES DO PRODUTO", color = PrimaryBrown, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(item.nome, color = TextDarkBrown, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+
+            Divider(modifier = Modifier.padding(vertical = 24.dp), color = TextDarkBrown.copy(alpha = 0.1f), thickness = 2.dp)
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("EM ESTOQUE", color = TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("${item.quantidadeAtual}${item.unidade}", color = if (emAlerta) CorAlerta else TextDarkBrown, fontSize = 36.sp, fontWeight = FontWeight.ExtraBold)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("ALERTA MÍNIMO", color = TextDarkBrown, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("${item.quantidadeMinima}${item.unidade}", color = TextDarkBrown, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Box(modifier = Modifier.fillMaxWidth().background(BackgroundCream, RoundedCornerShape(8.dp)).padding(16.dp)) {
+                Column {
+                    Text("ÚLTIMA ATUALIZAÇÃO / COMPRA:", color = TextDarkBrown, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(item.ultimaCompra, color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(40.dp))
+
+            Button(
+                onClick = onAjustarClick,
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(backgroundColor = PrimaryBrown, contentColor = OnPrimary)
+            ) {
+                Text("AJUSTAR ESTOQUE", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            TextButton(onClick = { /* Histórico futuro */ }, modifier = Modifier.fillMaxWidth()) {
+                Text("VER HISTÓRICO", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
 fun ModalEstoque(
-    item: ItemEstoqueResponse?, corFundo: Color, corDestaque: Color, corTexto: Color,
+    item: ItemEstoqueResponse?,
     onDismiss: () -> Unit, onSave: (String, Double, Double, String) -> Unit
 ) {
     var nome by remember { mutableStateOf(item?.nome ?: "") }
@@ -178,38 +280,53 @@ fun ModalEstoque(
     var qtdMinima by remember { mutableStateOf(item?.quantidadeMinima?.toString() ?: "") }
     var unidade by remember { mutableStateOf(item?.unidade ?: "KG") }
 
+    val textFieldColors = TextFieldDefaults.outlinedTextFieldColors(
+        textColor = TextDarkBrown,
+        focusedBorderColor = PrimaryBrown,
+        cursorColor = PrimaryBrown,
+        unfocusedBorderColor = TextDarkBrown.copy(alpha = 0.5f)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        backgroundColor = corFundo,
-        title = { Text(if (item == null) "NOVO ITEM" else "EDITAR ITEM", color = corDestaque, fontWeight = FontWeight.Bold) },
+        backgroundColor = SurfaceWhite,
+        shape = RoundedCornerShape(16.dp),
+        title = {
+            Text(
+                text = if (item == null) "NOVO ITEM" else "EDITAR ITEM",
+                color = SecondaryOrange,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 16.dp)) {
                 OutlinedTextField(
                     value = nome, onValueChange = { nome = it.uppercase() },
-                    label = { Text("Nome do Produto", color = corTexto) },
-                    colors = TextFieldDefaults.outlinedTextFieldColors(textColor = corTexto, focusedBorderColor = corDestaque, focusedLabelColor = corDestaque, cursorColor = corDestaque),
+                    label = { Text("Nome do Produto", fontWeight = FontWeight.Medium) },
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = qtdAtual, onValueChange = { qtdAtual = it },
-                        label = { Text("Qtd Atual", color = corTexto) },
+                        label = { Text("Qtd Atual", fontWeight = FontWeight.Medium) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = TextFieldDefaults.outlinedTextFieldColors(textColor = corTexto, focusedBorderColor = corDestaque, focusedLabelColor = corDestaque, cursorColor = corDestaque),
+                        colors = textFieldColors,
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
                         value = unidade, onValueChange = { unidade = it.uppercase() },
-                        label = { Text("UN, KG, L", color = corTexto) },
-                        colors = TextFieldDefaults.outlinedTextFieldColors(textColor = corTexto, focusedBorderColor = corDestaque, focusedLabelColor = corDestaque, cursorColor = corDestaque),
+                        label = { Text("UN, KG, L", fontWeight = FontWeight.Medium) },
+                        colors = textFieldColors,
                         modifier = Modifier.weight(0.8f)
                     )
                 }
                 OutlinedTextField(
                     value = qtdMinima, onValueChange = { qtdMinima = it },
-                    label = { Text("Alerta Mínimo", color = corTexto) },
+                    label = { Text("Alerta Mínimo", fontWeight = FontWeight.Medium) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(textColor = corTexto, focusedBorderColor = corDestaque, focusedLabelColor = corDestaque, cursorColor = corDestaque),
+                    colors = textFieldColors,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -221,73 +338,15 @@ fun ModalEstoque(
                     val min = qtdMinima.replace(",", ".").toDoubleOrNull() ?: 0.0
                     if (nome.isNotBlank()) onSave(nome, atual, min, unidade)
                 },
-                colors = ButtonDefaults.buttonColors(backgroundColor = corDestaque, contentColor = Color(0xFF362511))
+                modifier = Modifier.height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(backgroundColor = PrimaryBrown, contentColor = OnPrimary)
             ) { Text("SALVAR", fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("CANCELAR", color = corTexto) }
+            TextButton(onClick = onDismiss, modifier = Modifier.height(48.dp)) {
+                Text("CANCELAR", color = TextDarkBrown, fontWeight = FontWeight.Bold)
+            }
         }
     )
-}
-
-@Composable
-fun CardItemEstoque(item: ItemEstoqueResponse, isSelecionado: Boolean, corDestaque: Color, corFundoCard: Color, corClara: Color, onClick: () -> Unit, onEditClick: () -> Unit) {
-    val backgroundColor = if (isSelecionado) corDestaque else corFundoCard
-    val textColor = if (isSelecionado) Color(0xFF362511) else corClara
-
-    Card(
-        backgroundColor = backgroundColor,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth().clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(text = "${item.nome} - ${item.quantidadeAtual}${item.unidade}", color = textColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text(text = "(MIN: ${item.quantidadeMinima}${item.unidade})", color = textColor.copy(alpha = 0.8f), fontSize = 12.sp)
-            }
-            if (isSelecionado) {
-                IconButton(onClick = onEditClick) { Icon(Icons.Default.Edit, contentDescription = "Editar", tint = Color(0xFF362511)) }
-            }
-        }
-    }
-}
-
-@Composable
-fun CardDetalhesEstoque(item: ItemEstoqueResponse, corFundoCard: Color, corDestaque: Color, corClara: Color, onAjustarClick: () -> Unit) {
-    Card(backgroundColor = corFundoCard, shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(32.dp)) {
-            Text("DETALHES DO ITEM: ${item.nome}", color = corClara, fontSize = 20.sp)
-            Spacer(modifier = Modifier.height(40.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("QUANTIDADE:", color = corClara.copy(alpha = 0.7f), fontSize = 14.sp)
-                    Text("${item.quantidadeAtual}${item.unidade}", color = corClara, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                }
-                Column {
-                    Text("QUANTIDADE MÍNIMA:", color = corClara.copy(alpha = 0.7f), fontSize = 14.sp)
-                    Text("${item.quantidadeMinima}${item.unidade}", color = corClara, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
-            Text("ÚLTIMA DATA DE COMPRA:", color = corClara.copy(alpha = 0.7f), fontSize = 14.sp)
-            Text(item.ultimaCompra, color = corClara, fontSize = 20.sp)
-
-            Spacer(modifier = Modifier.height(48.dp))
-            Button(
-                onClick = onAjustarClick, modifier = Modifier.fillMaxWidth().height(56.dp),
-                shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(backgroundColor = corDestaque, contentColor = Color(0xFF362511))
-            ) { Text("AJUSTAR ESTOQUE", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            TextButton(onClick = { /* Histórico */ }, modifier = Modifier.fillMaxWidth()) {
-                Text("VER HISTÓRICO", color = corClara, fontSize = 16.sp)
-            }
-        }
-    }
 }

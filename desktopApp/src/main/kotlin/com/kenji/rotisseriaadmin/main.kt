@@ -27,6 +27,9 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
+
+// Import das suas telas
 import com.kenji.rotisseriaadmin.ui.screens.CaixaScreen
 import com.kenji.rotisseriaadmin.ui.screens.CardapioScreen
 import com.kenji.rotisseriaadmin.ui.screens.DashboardScreen
@@ -34,6 +37,7 @@ import com.kenji.rotisseriaadmin.ui.screens.EstoqueScreen
 import com.kenji.rotisseriaadmin.ui.screens.FiadosScreen
 import com.kenji.rotisseriaadmin.ui.screens.HistoricoScreen
 import com.kenji.rotisseriaadmin.ui.screens.NovoPedidoScreen
+import com.kenji.rotisseriaadmin.ui.screens.FechamentoCaixaScreen // <-- IMPORT DA TELA NOVA
 import com.kenji.rotisseriaadmin.ui.theme.*
 
 @Composable
@@ -108,6 +112,10 @@ fun WindowScope.NuiApp(windowState: WindowState, onClose: () -> Unit) {
                     NuiMenuButton("Centro de Comando", Icons.Default.Dashboard, telaAtual) { telaAtual = "Centro de Comando" }
                     NuiMenuButton("Novo Pedido", Icons.Default.AddShoppingCart, telaAtual) { telaAtual = "Novo Pedido" }
                     NuiMenuButton("Caixa", Icons.Default.PointOfSale, telaAtual) { telaAtual = "Caixa" }
+
+                    // BOTÃO NOVO ADICIONADO AQUI:
+                    NuiMenuButton("Fechamento", Icons.Default.Assessment, telaAtual) { telaAtual = "Fechamento" }
+
                     NuiMenuButton("Fiados", Icons.Default.MoneyOff, telaAtual) { telaAtual = "Fiados" }
                     NuiMenuButton("Estoque", Icons.Default.Inventory, telaAtual) { telaAtual = "Estoque" }
                     NuiMenuButton("Cardápio", Icons.Default.RestaurantMenu, telaAtual) { telaAtual = "Cardápio" }
@@ -121,6 +129,10 @@ fun WindowScope.NuiApp(windowState: WindowState, onClose: () -> Unit) {
                         "Estoque" -> EstoqueScreen()
                         "Novo Pedido" -> NovoPedidoScreen()
                         "Caixa" -> CaixaScreen()
+
+                        // ROTEAMENTO DA NOVA TELA AQUI:
+                        "Fechamento" -> FechamentoCaixaScreen(onVoltar = { telaAtual = "Centro de Comando" })
+
                         "Fiados" -> FiadosScreen()
                         "Cardápio" -> CardapioScreen()
                         "Histórico" -> HistoricoScreen()
@@ -171,7 +183,7 @@ fun NuiMenuButton(nome: String, icone: ImageVector, telaAtual: String, onClick: 
 }
 
 fun main() = application {
-    val windowState = remember { WindowState(width = 1200.dp, height = 800.dp) }
+    val windowState = rememberWindowState(placement = WindowPlacement.Maximized)
     Window(
         onCloseRequest = ::exitApplication,
         state = windowState,

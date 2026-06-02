@@ -7,7 +7,7 @@ val OnPrimary = Color(0xFFFFE45B)
 val SecondaryOrange = Color(0x66AC7000)
 val OnSecondary = Color(0xFFD9B536)
 val BackgroundCream = Color(0xFFBFA20D)
-val SurfaceWhite = Color(0xFFAD9240)
+val SurfaceWhite = Color(0xFFBFA20D)
 val TextDarkBrown = Color(0xFF3E2723)
 
 // Mapeamento de retrocompatibilidade para as nossas telas Desktop:

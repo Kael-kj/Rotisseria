@@ -83,40 +83,60 @@ fun CardapioScreen() {
         formIngredientes = prato.ingredientes
     }
 
+    // Padrão de cores para os TextFields para reaproveitamento
+    val textFieldColors = TextFieldDefaults.outlinedTextFieldColors(
+        textColor = TextDarkBrown,
+        focusedBorderColor = PrimaryBrown,
+        cursorColor = PrimaryBrown,
+        unfocusedBorderColor = TextDarkBrown.copy(alpha = 0.5f)
+    )
+
     Box(modifier = Modifier.fillMaxSize().padding(32.dp)) {
         if (isLoading) {
             CircularProgressIndicator(color = PrimaryBrown, modifier = Modifier.align(Alignment.Center))
         } else {
             Row(modifier = Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(32.dp)) {
 
+                // ==========================================
                 // COLUNA ESQUERDA: LISTA DO CARDÁPIO
+                // ==========================================
                 Column(modifier = Modifier.weight(1.3f).fillMaxHeight()) {
-                    Text("Gestão de Cardápio", color = TextDarkBrown, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("Gestão de Cardápio", color = TextDarkBrown, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(modifier = Modifier.height(24.dp))
 
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         cardapio.groupBy { it.categoria }.forEach { (categoria, pratos) ->
-                            item { Text(categoria.uppercase(), color = PrimaryBrown, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp)) }
+                            item {
+                                Text(
+                                    text = categoria.uppercase(),
+                                    color = PrimaryBrown,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+                                )
+                            }
                             items(pratos) { prato ->
-                                Card(backgroundColor = SurfaceWhite, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Card(
+                                    backgroundColor = SurfaceWhite,
+                                    shape = RoundedCornerShape(12.dp),
+                                    elevation = 2.dp,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(prato.nome, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextDarkBrown)
-                                            Text("R$ ${"%.2f".format(prato.preco)}", color = TextDarkBrown.copy(alpha = 0.5f))
+                                            Text(prato.nome, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = TextDarkBrown)
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text("R$ ${"%.2f".format(prato.preco)}", color = TextDarkBrown, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                                         }
 
-                                        // SWITCH DE DISPONIBILIDADE (O QUE VOCÊ PEDIU)
                                         Switch(
                                             checked = prato.disponivel,
                                             onCheckedChange = { novoStatus ->
-                                                // 1. Muda na tela instantaneamente para não parecer travado
                                                 cardapio = cardapio.map { if (it.id == prato.id) it.copy(disponivel = novoStatus) else it }
-
-                                                // 2. Avisa o servidor em segundo plano
                                                 coroutineScope.launch {
                                                     val request = ItemCardapioRequest(
                                                         prato.nome, prato.categoria, prato.preco,
-                                                        novoStatus, // Novo valor aqui
+                                                        novoStatus,
                                                         prato.parceria, prato.limiteDiario, prato.estoqueAtual, prato.ingredientes
                                                     )
                                                     RotisseriaApi.atualizarPrato(prato.id, request)
@@ -127,8 +147,11 @@ fun CardapioScreen() {
 
                                         Spacer(modifier = Modifier.width(16.dp))
 
-                                        IconButton(onClick = { editarPrato(prato) }, modifier = Modifier.background(SecondaryOrange, RoundedCornerShape(8.dp)).size(40.dp)) {
-                                            Icon(Icons.Default.Edit, null, tint = SurfaceWhite, modifier = Modifier.size(20.dp))
+                                        IconButton(
+                                            onClick = { editarPrato(prato) },
+                                            modifier = Modifier.background(PrimaryBrown, RoundedCornerShape(8.dp)).size(48.dp)
+                                        ) {
+                                            Icon(Icons.Default.Edit, contentDescription = "Editar", tint = SurfaceWhite, modifier = Modifier.size(24.dp))
                                         }
                                     }
                                 }
@@ -137,111 +160,176 @@ fun CardapioScreen() {
                     }
                 }
 
+                // ==========================================
                 // COLUNA DIREITA: FORMULÁRIO COMPLETO
+                // ==========================================
                 Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                    // BOTÃO NOVO PRATO (MUITO IMPORTANTE!)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (pratoEmEdicao == null) "ADICIONAR NOVO" else "EDITANDO PRATO", color = SecondaryOrange, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (pratoEmEdicao == null) "NOVO PRATO" else "EDITANDO PRATO",
+                            color = SecondaryOrange,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
                         Button(
                             onClick = { limparFormulario() },
                             colors = ButtonDefaults.buttonColors(backgroundColor = SecondaryOrange, contentColor = Color.White),
-                            shape = RoundedCornerShape(8.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(40.dp)
                         ) {
-                            Icon(Icons.Default.Add, null, modifier = Modifier.size(16.dp))
-                            Text(" NOVO", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Add, contentDescription = "Novo", modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("NOVO", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    OutlinedTextField(value = formNome, onValueChange = { formNome = it }, label = { Text("Nome do Prato") }, modifier = Modifier.fillMaxWidth())
-                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = formNome,
+                        onValueChange = { formNome = it },
+                        label = { Text("Nome do Prato", fontWeight = FontWeight.Medium) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = textFieldColors
+                    )
 
-                    // Categorias
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     Box {
-                        OutlinedTextField(value = formCategoria, onValueChange = { formCategoria = it }, label = { Text("Categoria") }, modifier = Modifier.fillMaxWidth(),
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, Modifier.clickable { dropdownCategoriaExpanded = true }) })
+                        OutlinedTextField(
+                            value = formCategoria,
+                            onValueChange = { formCategoria = it },
+                            label = { Text("Categoria", fontWeight = FontWeight.Medium) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = textFieldColors,
+                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = "Abrir", Modifier.clickable { dropdownCategoriaExpanded = true }, tint = TextDarkBrown) }
+                        )
                         DropdownMenu(expanded = dropdownCategoriaExpanded, onDismissRequest = { dropdownCategoriaExpanded = false }) {
                             listOf("Prato Principal", "Acompanhamentos", "Bebidas", "Sobremesas", "Doce").forEach { cat ->
-                                DropdownMenuItem(onClick = { formCategoria = cat; dropdownCategoriaExpanded = false }) { Text(cat) }
+                                DropdownMenuItem(onClick = { formCategoria = cat; dropdownCategoriaExpanded = false }) {
+                                    Text(cat, color = TextDarkBrown, fontWeight = FontWeight.Medium)
+                                }
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = formPreco, onValueChange = { formPreco = it }, label = { Text("Preço (R$)") }, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        OutlinedTextField(value = formParceria, onValueChange = { formParceria = it }, label = { Text("Parceria") }, modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = formPreco,
+                            onValueChange = { formPreco = it },
+                            label = { Text("Preço (R$)", fontWeight = FontWeight.Medium) },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = textFieldColors
+                        )
+                        OutlinedTextField(
+                            value = formParceria,
+                            onValueChange = { formParceria = it },
+                            label = { Text("Parceria", fontWeight = FontWeight.Medium) },
+                            modifier = Modifier.weight(1f),
+                            colors = textFieldColors
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
                     // LIMITES
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = formTemLimite, onCheckedChange = { formTemLimite = it }, colors = CheckboxDefaults.colors(checkedColor = PrimaryBrown))
-                        Text(" Tem limite diário?", fontSize = 14.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.background(BackgroundCream, RoundedCornerShape(8.dp)).padding(8.dp).fillMaxWidth()) {
+                        Checkbox(
+                            checked = formTemLimite,
+                            onCheckedChange = { formTemLimite = it },
+                            colors = CheckboxDefaults.colors(checkedColor = PrimaryBrown, uncheckedColor = TextDarkBrown)
+                        )
+                        Text("Tem limite diário?", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextDarkBrown)
                         if (formTemLimite) {
                             Spacer(modifier = Modifier.width(16.dp))
-                            OutlinedTextField(value = formLimiteDiario, onValueChange = { formLimiteDiario = it }, label = { Text("Qtd") }, modifier = Modifier.width(80.dp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                            OutlinedTextField(
+                                value = formLimiteDiario,
+                                onValueChange = { formLimiteDiario = it },
+                                label = { Text("Qtd") },
+                                modifier = Modifier.width(100.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                colors = textFieldColors
+                            )
                         }
                     }
 
-                    Divider(modifier = Modifier.padding(vertical = 16.dp), color = SurfaceWhite, thickness = 2.dp)
+                    Divider(modifier = Modifier.padding(vertical = 24.dp), color = TextDarkBrown.copy(alpha = 0.1f), thickness = 2.dp)
 
                     // FICHA TÉCNICA
-                    Text("FICHA TÉCNICA (Baixa estoque)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("FICHA TÉCNICA (Baixa estoque)", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = TextDarkBrown)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Box(modifier = Modifier.weight(2f)) {
-                            OutlinedTextField(value = ingredienteSelecionado?.nome ?: "Ingrediente", onValueChange = {}, readOnly = true, modifier = Modifier.fillMaxWidth(),
-                                trailingIcon = { Icon(Icons.Default.Search, null, Modifier.clickable { dropdownEstoqueExpanded = true }) })
+                            OutlinedTextField(
+                                value = ingredienteSelecionado?.nome ?: "Selecionar Ingrediente",
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = textFieldColors,
+                                trailingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar", Modifier.clickable { dropdownEstoqueExpanded = true }, tint = TextDarkBrown) }
+                            )
                             DropdownMenu(expanded = dropdownEstoqueExpanded, onDismissRequest = { dropdownEstoqueExpanded = false }) {
-                                estoque.forEach { item -> DropdownMenuItem(onClick = { ingredienteSelecionado = item; dropdownEstoqueExpanded = false }) { Text(item.nome) } }
+                                estoque.forEach { item ->
+                                    DropdownMenuItem(onClick = { ingredienteSelecionado = item; dropdownEstoqueExpanded = false }) {
+                                        Text(item.nome, color = TextDarkBrown, fontWeight = FontWeight.Medium)
+                                    }
+                                }
                             }
                         }
-                        OutlinedTextField(value = ingredienteQtd, onValueChange = { ingredienteQtd = it }, label = { Text("Qtd") }, modifier = Modifier.weight(1f))
-                        IconButton(onClick = {
-                            if (ingredienteSelecionado != null && ingredienteQtd.isNotEmpty()) {
-                                formIngredientes = formIngredientes + IngredienteNoPrato(ingredienteSelecionado!!.nome, ingredienteQtd.replace(",",".").toDouble())
-                                ingredienteSelecionado = null; ingredienteQtd = ""
-                            }
-                        }, modifier = Modifier.background(SecondaryOrange, RoundedCornerShape(8.dp))) { Icon(Icons.Default.Add, null, tint = SurfaceWhite) }
+                        OutlinedTextField(
+                            value = ingredienteQtd,
+                            onValueChange = { ingredienteQtd = it },
+                            label = { Text("Qtd") },
+                            modifier = Modifier.weight(1f),
+                            colors = textFieldColors
+                        )
+                        IconButton(
+                            onClick = {
+                                if (ingredienteSelecionado != null && ingredienteQtd.isNotEmpty()) {
+                                    formIngredientes = formIngredientes + IngredienteNoPrato(ingredienteSelecionado!!.nome, ingredienteQtd.replace(",",".").toDouble())
+                                    ingredienteSelecionado = null; ingredienteQtd = ""
+                                }
+                            },
+                            modifier = Modifier.background(SecondaryOrange, RoundedCornerShape(8.dp)).size(56.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Adicionar", tint = SurfaceWhite, modifier = Modifier.size(28.dp))
+                        }
                     }
 
-                    LazyColumn(modifier = Modifier.weight(1f).padding(top = 8.dp)) {
+                    LazyColumn(modifier = Modifier.weight(1f).padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(formIngredientes) { ing ->
-                            Row(modifier = Modifier.fillMaxWidth().background(SurfaceWhite.copy(0.5f), RoundedCornerShape(4.dp)).padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("${ing.quantidadeNecessaria}x ${ing.nomeIngrediente}", fontSize = 12.sp)
-                                Icon(Icons.Default.Close, null, Modifier.size(16.dp).clickable { formIngredientes = formIngredientes - ing }, tint = CorAlerta)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().background(BackgroundCream, RoundedCornerShape(8.dp)).padding(16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("${ing.quantidadeNecessaria}x  ${ing.nomeIngrediente}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextDarkBrown)
+                                Icon(Icons.Default.Close, contentDescription = "Remover", Modifier.size(24.dp).clickable { formIngredientes = formIngredientes - ing }, tint = CorAlerta)
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // O BOTÃO DE SALVAR (CADASTRAR OU ATUALIZAR)
                     Button(
                         onClick = {
                             coroutineScope.launch {
                                 val limit = if(formTemLimite) formLimiteDiario.toIntOrNull() else null
 
-                                // ==========================================
-                                // A MATEMÁTICA INTELIGENTE DO ESTOQUE
-                                // ==========================================
                                 val estoqueParaSalvar = if (pratoEmEdicao == null) {
-                                    limit // Prato novo: o estoque começa igual ao limite digitado
+                                    limit
                                 } else {
                                     if (limit != null) {
-                                        // Prato editado: Calcula quantos itens você adicionou ou removeu
                                         val limiteAntigo = pratoEmEdicao!!.limiteDiario ?: 0
                                         val diferenca = limit - limiteAntigo
-
-                                        // Soma essa diferença no estoque atual que sobrou na panela
                                         val novoEstoque = (pratoEmEdicao!!.estoqueAtual ?: 0) + diferenca
-
-                                        // Proteção para o estoque não ficar negativo se você errar a digitação
                                         if (novoEstoque < 0) 0 else novoEstoque
                                     } else {
-                                        null // Se você desmarcou a caixinha de limite, libera o estoque infinito
+                                        null
                                     }
                                 }
 
@@ -252,7 +340,7 @@ fun CardapioScreen() {
                                     disponivel = pratoEmEdicao?.disponivel ?: true,
                                     parceria = formParceria,
                                     limiteDiario = limit,
-                                    estoqueAtual = estoqueParaSalvar, // Agora salva o valor calculado!
+                                    estoqueAtual = estoqueParaSalvar,
                                     ingredientes = formIngredientes
                                 )
 
@@ -262,12 +350,16 @@ fun CardapioScreen() {
                                 if (sucesso) { carregarDados(); limparFormulario() }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        modifier = Modifier.fillMaxWidth().height(64.dp),
                         colors = ButtonDefaults.buttonColors(backgroundColor = PrimaryBrown, contentColor = OnPrimary),
                         shape = RoundedCornerShape(12.dp),
                         enabled = formNome.isNotBlank() && formPreco.isNotBlank()
                     ) {
-                        Text(if (pratoEmEdicao == null) "CADASTRAR NO CARDÁPIO" else "SALVAR ALTERAÇÕES", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (pratoEmEdicao == null) "CADASTRAR NO CARDÁPIO" else "SALVAR ALTERAÇÕES",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp
+                        )
                     }
                 }
             }

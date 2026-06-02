@@ -63,9 +63,20 @@ object RotisseriaApi {
 
     suspend fun fecharConta(mesa: String): Boolean {
         return try {
-            val response = client.put("$BASE_URL/comandas/$mesa/fechar")
-            response.status == HttpStatusCode.OK
+            // Codifica os espaços da mesa (ex: "MESA 1" vira "MESA%201") para a URL não quebrar
+            val mesaCodificada = java.net.URLEncoder.encode(mesa, "UTF-8").replace("+", "%20")
+
+            val response = client.put("$BASE_URL/comandas/$mesaCodificada/fechar")
+
+            if (response.status == io.ktor.http.HttpStatusCode.OK) {
+                true
+            } else {
+//                val erroServer = io.ktor.client.statement.bodyAsText(response)
+                println("❌ ERRO DO SERVIDOR AO FECHAR CONTA: Status ${response.status} -> ")
+                false
+            }
         } catch (e: Exception) {
+            println("❌ ERRO DE CÓDIGO NO APP: A requisição de fechar conta nem saiu.")
             e.printStackTrace()
             false
         }
@@ -123,6 +134,7 @@ object RotisseriaApi {
 
     suspend fun buscarHistorico(): List<ComandaResponse> {
         return try {
+            // Usa o Ktor Client do front para bater na rota que criamos no backend
             client.get("$BASE_URL/historico").body()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -273,6 +285,29 @@ object RotisseriaApi {
             }
             response.status == HttpStatusCode.OK
         } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    // Função para apagar um item da comanda pelo Caixa
+    suspend fun cancelarItem(mesa: String, nomeItem: String): Boolean {
+        return try {
+            // 1. Transforma os espaços em código de URL válido (ex: "Coca%20Cola")
+            val mesaCodificada = java.net.URLEncoder.encode(mesa, "UTF-8").replace("+", "%20")
+            val nomeCodificado = java.net.URLEncoder.encode(nomeItem, "UTF-8").replace("+", "%20")
+
+            val response = client.delete("$BASE_URL/comandas/$mesaCodificada/item/$nomeCodificado")
+
+            if (response.status == io.ktor.http.HttpStatusCode.OK) {
+                true
+            } else {
+                // Se o servidor Ktor barrar, vai printar o motivo no painel inferior do Android Studio
+                println("❌ ERRO DO SERVIDOR AO DELETAR: Status ${response.status} -> ")
+                false
+            }
+        } catch (e: Exception) {
+            println("❌ ERRO DE CÓDIGO NO APP: A requisição nem saiu.")
             e.printStackTrace()
             false
         }
