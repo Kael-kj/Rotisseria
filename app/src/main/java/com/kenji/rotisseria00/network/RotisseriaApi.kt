@@ -8,11 +8,34 @@ import io.ktor.http.*
 
 object RotisseriaApi {
 
-    private var BASE_URL = "https://manfully-tentiest-britt.ngrok-free.dev"
+//    private var BASE_URL = "http://192.168.0.11:8080" // IP padrão para Emulador (No celular real, use o IP do seu PC)
+    private var BASE_URL = "http://192.168.0.101:8080" // IP do Cliente
 
     fun updateBaseUrl(newUrl: String) {
+        // Ignora localhost se vier do NSD, pois no Android não serve para o PC
+        if (newUrl.contains("127.0.0.1") || newUrl.contains("localhost")) {
+            println("Aviso: Ignorando URL de loopback detectada pelo NSD: $newUrl")
+            return
+        }
         BASE_URL = newUrl
         println("API BASE_URL atualizada para: $BASE_URL")
+    }
+
+    // 0. Login Centralizado (Usa a BASE_URL atual)
+    suspend fun fazerLogin(usuario: String, senha: String): com.kenji.rotisseria00.models.LoginResponse {
+        println("LOGIN: Iniciando tentativa em $BASE_URL/login")
+        return try {
+            val response = KtorClient.httpClient.post("$BASE_URL/login") {
+                contentType(ContentType.Application.Json)
+                setBody(com.kenji.rotisseria00.models.LoginRequest(usuario, senha))
+            }
+            println("LOGIN: Servidor respondeu com status ${response.status}")
+            response.body()
+        } catch (e: Exception) {
+            println("LOGIN: ERRO DE CONEXÃO em $BASE_URL")
+            e.printStackTrace()
+            com.kenji.rotisseria00.models.LoginResponse(false, null, "Erro ao conectar no servidor local ($BASE_URL).")
+        }
     }
 
     // 1. Envia a comanda para a cozinha e salva no banco
@@ -38,9 +61,9 @@ object RotisseriaApi {
                 }
             }
         } catch (e: Exception) {
-            println("DEBUG: ERRO CRÍTICO NA CONEXÃO: ${e.message}")
-            e.printStackTrace()
-            Pair(false, "Falha de conexão com o servidor.")
+            // Pegamos o nome técnico do erro e a mensagem que o sistema gerou
+            val erroReal = "${e.javaClass.simpleName}: ${e.message}"
+            Pair(false, "ERRO TÉCNICO:\n$erroReal")
         }
     }
 
@@ -125,8 +148,11 @@ object RotisseriaApi {
         return try {
             KtorClient.httpClient.get("$BASE_URL/cardapio").body()
         } catch (e: Exception) {
+            // Se der erro ao buscar o cardápio, a gente força o crash ou mostra o erro
             e.printStackTrace()
             emptyList()
+            // Dica: se o cardápio não carregar, o problema é aqui.
+            // O erro mais comum é SerializationException (JSON não bate com o Kotlin).
         }
     }
 

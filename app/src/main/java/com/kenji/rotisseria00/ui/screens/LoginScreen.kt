@@ -106,13 +106,7 @@ fun LoginScreen(onLoginSucesso: (String) -> Unit) {
                     isLoading = true
                     erroMensagem = ""
                     try {
-                        // Faz o POST para o Ktor (10.0.2.2 é o localhost do emulador)
-                        val response = KtorClient.httpClient.post("https://manfully-tentiest-britt.ngrok-free.dev/login") {
-                            contentType(ContentType.Application.Json)
-                            setBody(LoginRequest(usuario, senha))
-                        }
-
-                        val loginResponse: LoginResponse = response.body()
+                        val loginResponse = com.kenji.rotisseria00.network.RotisseriaApi.fazerLogin(usuario, senha)
 
                         if (loginResponse.sucesso) {
                             // Sucesso! Avisa a navegação passando o perfil que veio do banco

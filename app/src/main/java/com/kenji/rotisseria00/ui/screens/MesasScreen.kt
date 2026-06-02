@@ -62,18 +62,27 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
                     }
                     
                     // Preservar itens locais (AGUARDANDO) desta mesa
-                    val itensLocais = ControlePedidos.comandasAbertas[comanda.mesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
-                    ControlePedidos.comandasAbertas[comanda.mesa] = (itensServidor + itensLocais).toMutableList()
+                    val itensLocais = ControlePedidos.comandasAbertas[comanda.mesa]?.itens?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                    ControlePedidos.comandasAbertas[comanda.mesa] = DadosMesa(
+                        itens = (itensServidor + itensLocais).toMutableList(),
+                        nomeCliente = comanda.nomeCliente
+                    )
                 }
 
-                // 2. Limpar mesas locais que não estão no servidor, mas mantendo o que estiver "AGUARDANDO"
+                // 2. Limpar mesas locais que não estão no servidor, mas mantendo o que estiver "AGUARDANDO" ou que tenha um NOME definido
                 val mesasParaRemover = ControlePedidos.comandasAbertas.keys.filter { it !in mesasNoServidor }
                 mesasParaRemover.forEach { mesa ->
-                    val itensLocais = ControlePedidos.comandasAbertas[mesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
-                    if (itensLocais.isEmpty()) {
+                    val dadosLocais = ControlePedidos.comandasAbertas[mesa]
+                    val itensLocais = dadosLocais?.itens?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                    
+                    // SÓ REMOVE se não tiver itens esperando envio E não tiver um nome de cliente digitado
+                    if (itensLocais.isEmpty() && (dadosLocais?.nomeCliente.isNullOrBlank())) {
                         ControlePedidos.comandasAbertas.remove(mesa)
                     } else {
-                        ControlePedidos.comandasAbertas[mesa] = itensLocais.toMutableList()
+                        ControlePedidos.comandasAbertas[mesa] = DadosMesa(
+                            itens = itensLocais.toMutableList(),
+                            nomeCliente = dadosLocais?.nomeCliente ?: ""
+                        )
                     }
                 }
 
@@ -154,12 +163,15 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
                 val numeroMesa = index + 1
                 val numeroMesaFormatado = numeroMesa.toString().padStart(2, '0')
 
-                // A mesa está ocupada se existir no ControlePedidos
-                val estaOcupada = ControlePedidos.comandasAbertas[numeroMesaFormatado]?.isNotEmpty() == true
+                // A mesa está ocupada se existir no ControlePedidos (tendo itens OU tendo um nome de cliente)
+                val dadosMesa = ControlePedidos.comandasAbertas[numeroMesaFormatado]
+                val estaOcupada = (dadosMesa?.itens?.isNotEmpty() == true) || (dadosMesa?.nomeCliente?.isNotEmpty() == true)
+                val nomeCliente = dadosMesa?.nomeCliente ?: ""
 
                 MesaCard(
                     numero = numeroMesaFormatado,
                     ocupada = estaOcupada,
+                    nomeCliente = nomeCliente,
                     onClick = {
                         onMesaClick(numeroMesaFormatado)
                     }
@@ -171,7 +183,7 @@ fun MesasScreen(onMesaClick: (String) -> Unit) {
 
 // --- COMPONENTE DO CARTÃO ---
 @Composable
-fun MesaCard(numero: String, ocupada: Boolean, onClick: () -> Unit) {
+fun MesaCard(numero: String, ocupada: Boolean, nomeCliente: String, onClick: () -> Unit) {
     val corFundoCard = if (ocupada) Color(0xFFF8CE6A) else Color(0xFFEBE1CE)
     val corTextoCard = Color(0xFF432F17)
 
@@ -191,18 +203,31 @@ fun MesaCard(numero: String, ocupada: Boolean, onClick: () -> Unit) {
             Text(
                 text = "MESA",
                 color = corTextoCard,
-                fontSize = 12.sp,
-                fontFamily = FidalgaFont // Usando a sua fonte!
+                fontSize = 10.sp,
+                fontFamily = FidalgaFont
             )
 
             Text(
                 text = numero,
                 color = corTextoCard,
-                fontSize = 36.sp,
-                fontFamily = FidalgaFont // Usando a sua fonte!
+                fontSize = 32.sp,
+                fontFamily = FidalgaFont
             )
 
             if (ocupada) {
+                if (nomeCliente.isNotEmpty()) {
+                    Text(
+                        text = nomeCliente,
+                        color = corTextoCard,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FidalgaFont,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
@@ -210,15 +235,15 @@ fun MesaCard(numero: String, ocupada: Boolean, onClick: () -> Unit) {
                     Text(
                         text = "Ocupada",
                         color = corTextoCard,
-                        fontSize = 12.sp,
-                        fontFamily = FidalgaFont // Usando a sua fonte!
+                        fontSize = 10.sp,
+                        fontFamily = FidalgaFont
                     )
                     Spacer(modifier = Modifier.width(2.dp))
                     Icon(
-                        imageVector = Icons.Default.Schedule, // O relógio original voltou!
+                        imageVector = Icons.Default.Schedule,
                         contentDescription = "Ocupada",
                         tint = corTextoCard,
-                        modifier = Modifier.size(12.dp)
+                        modifier = Modifier.size(10.dp)
                     )
                 }
             } else {

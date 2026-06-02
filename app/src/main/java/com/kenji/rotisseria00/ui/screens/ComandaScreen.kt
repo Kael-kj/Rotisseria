@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.RestaurantMenu
@@ -31,28 +32,38 @@ import kotlinx.coroutines.launch
 // =========================================================================
 // 1. O ESTADO COMPARTILHADO
 // =========================================================================
+data class DadosMesa(val itens: MutableList<ItemPedido>, var nomeCliente: String)
+
 object ControlePedidos {
-    val comandasAbertas = mutableStateMapOf<String, MutableList<ItemPedido>>()
+    val comandasAbertas = mutableStateMapOf<String, DadosMesa>()
     val comandasNoCaixa = mutableStateListOf<ComandaFechada>()
 
     fun adicionarItem(mesa: String, item: ItemPedido) {
-        val listaAtual = comandasAbertas[mesa]?.toMutableList() ?: mutableListOf()
-        listaAtual.add(item)
-        comandasAbertas[mesa] = listaAtual
+        val dados = comandasAbertas[mesa] ?: DadosMesa(mutableListOf(), "")
+        dados.itens.add(item)
+        comandasAbertas[mesa] = dados.copy(itens = dados.itens.toMutableList())
+    }
+
+    fun atualizarNome(mesa: String, nome: String) {
+        val dados = comandasAbertas[mesa] ?: DadosMesa(mutableListOf(), "")
+        dados.nomeCliente = nome
+        comandasAbertas[mesa] = dados.copy()
     }
 
     fun enviarParaCozinha(mesa: String) {
-        val listaAtual = comandasAbertas[mesa]?.toMutableList() ?: return
+        val dados = comandasAbertas[mesa] ?: return
+        val listaAtual = dados.itens
         for (i in listaAtual.indices) {
             if (listaAtual[i].status == StatusItem.AGUARDANDO) {
                 listaAtual[i] = listaAtual[i].copy(status = StatusItem.NA_COZINHA)
             }
         }
-        comandasAbertas[mesa] = listaAtual
+        comandasAbertas[mesa] = dados.copy(itens = listaAtual.toMutableList())
     }
 
     fun fecharConta(mesa: String, nomeCliente: String) {
-        val itens = comandasAbertas[mesa] ?: return
+        val dados = comandasAbertas[mesa] ?: return
+        val itens = dados.itens
         if (itens.isEmpty()) return
         val valorTotal = itens.sumOf { it.preco * it.quantidade }
         val comandaFechada = ComandaFechada(mesa, nomeCliente, itens, valorTotal)
@@ -113,18 +124,18 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
     val corDivisor = Color(0xFF5A4A32)
 
     val coroutineScope = rememberCoroutineScope()
-    var nomeCliente by remember { mutableStateOf("") }
+    val dadosMesa = ControlePedidos.comandasAbertas[numeroMesa]
+    var nomeCliente by remember { mutableStateOf(dadosMesa?.nomeCliente ?: "") }
     var erroConexao by remember { mutableStateOf<String?>(null) }
 
     var mostrandoCardapio by remember { mutableStateOf(false) }
     var categoriaSelecionada by remember { mutableStateOf<String?>(null) }
-    var itemSendoCancelado by remember { mutableStateOf<ItemPedido?>(null) }
 
     var cardapioReal by remember { mutableStateOf<List<ItemCardapioResponse>>(emptyList()) }
     var isLoadingCardapio by remember { mutableStateOf(false) }
 
     var carrinho by remember { mutableStateOf(mapOf<ItemCardapioResponse, Int>()) }
-    val itensDestaMesa = ControlePedidos.comandasAbertas[numeroMesa] ?: emptyList()
+    val itensDestaMesa = dadosMesa?.itens ?: emptyList<ItemPedido>()
 
     // Sincronização automática com o servidor
     LaunchedEffect(numeroMesa) {
@@ -146,16 +157,22 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                     )
                 } ?: emptyList()
 
-                if (comandaServidor != null && nomeCliente.isEmpty()) {
-                    nomeCliente = comandaServidor.nomeCliente
+                if (comandaServidor != null) {
+                    if (nomeCliente.isEmpty()) nomeCliente = comandaServidor.nomeCliente
+                    // Sincroniza o nome no controle global também
+                    ControlePedidos.atualizarNome(numeroMesa, comandaServidor.nomeCliente)
                 }
                 
                 // Mesclar com itens locais que ainda não foram enviados (AGUARDANDO)
-                val itensLocaisNaoEnviados = ControlePedidos.comandasAbertas[numeroMesa]?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
+                val itensLocaisNaoEnviados = ControlePedidos.comandasAbertas[numeroMesa]?.itens?.filter { it.status == StatusItem.AGUARDANDO } ?: emptyList()
                 
                 // Só atualiza se houver algo para atualizar (evita recomposição desnecessária se estiver vazio)
                 if (itensServidor.isNotEmpty() || itensLocaisNaoEnviados.isNotEmpty()) {
-                    ControlePedidos.comandasAbertas[numeroMesa] = (itensServidor + itensLocaisNaoEnviados).toMutableList()
+                    val novosDados = DadosMesa(
+                        itens = (itensServidor + itensLocaisNaoEnviados).toMutableList(),
+                        nomeCliente = nomeCliente
+                    )
+                    ControlePedidos.comandasAbertas[numeroMesa] = novosDados
                 } else {
                     // Se não tem nada no servidor nem local, a mesa está livre
                     ControlePedidos.comandasAbertas.remove(numeroMesa)
@@ -376,8 +393,23 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                             fontWeight = FontWeight.Bold
                         )
                         OutlinedTextField(
-                            value = nomeCliente, onValueChange = { nomeCliente = it }, placeholder = { Text("Nome do Cliente", color = corTextoClaro.copy(alpha = 0.5f), fontFamily = FidalgaFont) },
+                            value = nomeCliente, 
+                            onValueChange = { 
+                                nomeCliente = it
+                                ControlePedidos.atualizarNome(numeroMesa, it)
+                            }, 
+                            placeholder = { Text("Nome do Cliente", color = corTextoClaro.copy(alpha = 0.5f), fontFamily = FidalgaFont) },
                             modifier = Modifier.fillMaxWidth(0.9f),
+                            trailingIcon = {
+                                if (nomeCliente.isNotBlank()) {
+                                    IconButton(onClick = { 
+                                        // Apenas para dar um feedback visual de confirmação
+                                        ControlePedidos.atualizarNome(numeroMesa, nomeCliente)
+                                    }) {
+                                        Icon(Icons.Default.Check, contentDescription = "Confirmar", tint = corTextoDestaque)
+                                    }
+                                }
+                            },
                             colors = OutlinedTextFieldDefaults.colors(focusedTextColor = corTextoClaro, unfocusedTextColor = corTextoClaro, focusedBorderColor = corTextoDestaque),
                             textStyle = LocalTextStyle.current.copy(fontFamily = FidalgaFont, fontSize = 18.sp)
                         )
@@ -392,12 +424,18 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                     LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 24.dp)) {
                         items(itensDestaMesa) { item -> 
                             ItemComandaRow(item, corTextoClaro, corDivisor) {
-                                if (item.status == StatusItem.AGUARDANDO) {
-                                    val lista = ControlePedidos.comandasAbertas[numeroMesa]?.toMutableList() ?: mutableListOf()
-                                    lista.remove(item)
-                                    ControlePedidos.comandasAbertas[numeroMesa] = lista
-                                } else {
-                                    itemSendoCancelado = item
+                                // 1. REMOVE DA TELA INSTANTANEAMENTE
+                                val dados = ControlePedidos.comandasAbertas[numeroMesa]
+                                if (dados != null) {
+                                    dados.itens.remove(item)
+                                    ControlePedidos.comandasAbertas[numeroMesa] = dados.copy(itens = dados.itens.toMutableList())
+                                }
+                                
+                                // 2. SE JÁ ESTIVER NO SERVIDOR, AVISA O SERVIDOR EM SEGUNDO PLANO
+                                if (item.status != StatusItem.AGUARDANDO) {
+                                    coroutineScope.launch {
+                                        RotisseriaApi.cancelarItem(numeroMesa, item.nome)
+                                    }
                                 }
                             }
                         }
@@ -508,34 +546,6 @@ fun ComandaScreen(numeroMesa: String, onVoltar: () -> Unit) {
                     ) {
                         Text("ENTENDIDO", fontWeight = FontWeight.Bold)
                     }
-                }
-            )
-        }
-
-        // DIÁLOGO DE CONFIRMAÇÃO PARA CANCELAR ITEM NO SERVIDOR
-        itemSendoCancelado?.let { item ->
-            AlertDialog(
-                onDismissRequest = { itemSendoCancelado = null },
-                title = { Text("Cancelar Item?", fontWeight = FontWeight.Bold) },
-                text = { Text("Tem certeza que deseja cancelar '${item.nome}'? Isso estornará o estoque automaticamente.") },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            coroutineScope.launch {
-                                val sucesso = RotisseriaApi.cancelarItem(numeroMesa, item.nome)
-                                if (sucesso) {
-                                    val lista = ControlePedidos.comandasAbertas[numeroMesa]?.toMutableList() ?: mutableListOf()
-                                    lista.remove(item)
-                                    ControlePedidos.comandasAbertas[numeroMesa] = lista
-                                }
-                                itemSendoCancelado = null
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
-                    ) { Text("CANCELAR AGORA", color = Color.White) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { itemSendoCancelado = null }) { Text("VOLTAR") }
                 }
             )
         }
